@@ -30,6 +30,8 @@ int connectedStations = 0;
 #define LWIP_DHCP_AP 0
 #if LWIP_DHCP_AP
 #include <LwipDhcpServer.h>
+#else
+#include <dhcpserver.h>
 #endif
 
 #define NAPT 1000
@@ -65,7 +67,7 @@ void InitSerial() {
 
         // Wait for printf to finish
         while (Serial.availableForWrite() != UART_TX_FIFO_SIZE)
-            yield();
+              yield();
 
         // Clear Tx buffer to avoid extra characters being printed
         Serial.flush();
@@ -76,6 +78,7 @@ void InitSerial() {
     Serial.setDebugOutput(DEBUG_PROC);
 }
 
+#if BUZZER_ENABLED    
 void TriggerBuzzer(int _delay, bool _infinite, int _count);
 void TriggerBuzzer(int _delay, bool _infinite = false, int _count = 3) {
     #if DEBUG_PROC
@@ -87,22 +90,25 @@ void TriggerBuzzer(int _delay, bool _infinite = false, int _count = 3) {
         delay(_delay);
         digitalWrite(BUZZER_PIN, LOW);
         __count += 1;
-        if(_infinite != true && __count >= _count)
+        if(!_infinite && _count > 0 && __count >= _count)
             break;
     }
 }
+#endif
 
 void setup() {
     delay(1000);
     pinMode(0,INPUT_PULLUP);
     pinMode(LED_BUILTIN,OUTPUT);
-    pinMode(BUZZER_PIN, OUTPUT);
+    //pinMode(BUZZER_PIN, OUTPUT);
     digitalWrite(LED_BUILTIN, HIGH); //active low
     InitSerial();
     
      if (WiFi.status() == WL_NO_SHIELD) {
         Serial.println("ERROR: WiFi shield not present");
+        #if BUZZER_ENABLED
         TriggerBuzzer(1000, true);
+        #endif
         delay_time = 4000;
         return;
      }      
@@ -112,7 +118,9 @@ void setup() {
 
     if (!LittleFS.begin()) {
         Serial.println("ERROR: LittleFS mount failed");
+        #if BUZZER_ENABLED
         TriggerBuzzer(1000, true);
+        #endif
         delay_time = 4000;
         return;
     }
@@ -145,23 +153,22 @@ void setup() {
                 Serial.print(":");
         }
         #endif
-        Serial.println();
         WiFi.softAP(DefaultWiFi);
         #if DEBUG_PROC
         IPAddress AccessPointIP = WiFi.softAPIP();
-        Serial.printf("DEBUG: AP IP address: %s\n", AccessPointIP.toString().c_str());
+        Serial.printf("\nDEBUG: AP IP address: %s", AccessPointIP.toString().c_str());
         #endif
         my_wifi.create_server();
         //server.begin();
         my_wifi.begin_server();
         #if DEBUG_PROC
-        Serial.printf("DEBUG: HTTP server started on port %d\n", WEBsrv_PORT);
+        Serial.printf("\nDEBUG: HTTP server started on port %d", WEBsrv_PORT);
         #endif
         delay_time=1000; // blink every sec if webserver is active
   }
   else if (ssid == "null") {
         // if the JSON parser failed, ssid will be null
-        Serial.println("NOTICE: temporary reversing configurations to defaults...");
+        Serial.print("\nNOTICE: temporary reversing configurations to defaults...");
         goto start_webserver;
         delay_time=500; // blink every half second
   }
@@ -171,10 +178,10 @@ void setup() {
       WiFi.begin(ssid, pass); // check function to understand
       #if DEBUG_PROC
       IPAddress StationIP = WiFi.localIP();
-     Serial.printf("DEBUG: Station IP Address: %s", StationIP.toString().c_str());
+     Serial.printf("\nDEBUG: Station IP Address: %s", StationIP.toString().c_str());
       #endif
       int timeout_counter=0;
-      Serial.print("\nINFO: Connecting");
+      Serial.print("\nINFO: Waiting for connection to WiFi");
       while (WiFi.status() != WL_CONNECTED) {
           if(timeout_counter>=WAIT_TIMEOUT)
               goto start_webserver; // if it fails to connect start_webserver
@@ -185,50 +192,54 @@ void setup() {
       delay(500);
     }
 
-     IPAddress __DNS1(8,8,8,8);
-     IPAddress __DNS2(8,8,4,4);
-     //WiFi.setDNS(__DNS1, __DNS2);
     #if LWIP_DHCP_AP
     // give DNS servers to AP side
     dhcpSoftAP.dhcps_set_dns(0, WiFi.dnsIP(0));
     dhcpSoftAP.dhcps_set_dns(1, WiFi.dnsIP(1));
-    #endif
+    #else
+    dhcps_set_dns(0, WiFi.dnsIP(0));
+    dhcps_set_dns(1, WiFi.dnsIP(1));
+     #endif
 
     Serial.printf("\nStation DNS: %s & %s\n",
                   WiFi.dnsIP(0).toString().c_str(),
                   WiFi.dnsIP(1).toString().c_str());
                 
-    IPAddress __localIP(192,168,1,50);
-    IPAddress __Gateway(192,168,1,1);
+    IPAddress __localIP(192,168,1,50); // 172, 217, 28, 254
+    IPAddress __Gateway(192,168,1,1); // 172, 217, 28, 254
     IPAddress __Subnet(255,255,255,0);
 
-    Serial.printf("INFO: Setting Access point configuration ... %s", (WiFi.softAPConfig(__localIP, __Gateway, __Subnet) ? "Ready" : "Failed"));
-    Serial.printf("INFO: Setting Access point ... %s", (WiFi.softAP(ap, pass, WiFiChannel, WiFiHidden, MaxWiFiConnections) ? "Ready" : "Failed"));
+    Serial.printf("\nINFO: Setting Access point configuration ... %s", (WiFi.softAPConfig(__localIP, __Gateway, __Subnet) ? "Ready" : "Failed"));
+    Serial.printf("\nINFO: Setting Access point ... %s", (WiFi.softAP(ap, pass, WiFiChannel, WiFiHidden, MaxWiFiConnections) ? "Ready" : "Failed"));
 
        #if DEBUG_PROC
-       Serial.printf("DEBUG: Heap before: %d\n", ESP.getFreeHeap());
+       Serial.printf("\nDEBUG: Heap before: %d", ESP.getFreeHeap());
        #endif
       err_t ret = ip_napt_init(NAPT, NAPT_PORT);
       #if DEBUG_PROC
-      Serial.printf("DEBUG: ip_napt_init(%d,%d): ret=%d (OK=%d)\n", NAPT, NAPT_PORT, (int)ret, (int)ERR_OK);
+      Serial.printf("\nDEBUG: ip_napt_init(%d,%d): ret=%d (OK=%d)\n", NAPT, NAPT_PORT, (int)ret, (int)ERR_OK);
       #endif
       if (ret == ERR_OK) {
           ret = ip_napt_enable_no(SOFTAP_IF, 1);
           #if DEBUG_PROC
-          Serial.printf("DEBUG: ip_napt_enable_no(SOFTAP_IF): ret=%d (OK=%d)\n", (int)ret, (int)ERR_OK);
+          Serial.printf("\nDEBUG: ip_napt_enable_no(SOFTAP_IF): ret=%d (OK=%d)\n", (int)ret, (int)ERR_OK);
           #endif
           if (ret == ERR_OK) {
-                Serial.printf("INFO: Successfully NATed to WiFi Network '%s' with the same password", ssid.c_str());
-                TriggerBuzzer(1000, false, 2);
+                Serial.printf("\nINFO: Successfully NATed to WiFi Network '%s' with the same password", ssid.c_str());
+                #if BUZZER_ENABLED
+                TriggerBuzzer(1000,false, 2);
+                #endif
            }
       }
       #if DEBUG_PROC
-      Serial.printf("DEBUG: Heap after napt init: %d\n", ESP.getFreeHeap());
+      Serial.printf("\nDEBUG: Heap after napt init: %d", ESP.getFreeHeap());
       #endif
       if (ret != ERR_OK) {
-          Serial.print("ERROR: NAPT initialization failed\n");
+          Serial.print("\nERROR: NAPT initialization failed");
+          #if BUZZER_ENABLED
           TriggerBuzzer(1000, true);
-          delay_time = 4000;
+          #endif
+          delay_time = 2500;
           return;
       }
       delay_time=500; // blink every half second if connection was succesfull
