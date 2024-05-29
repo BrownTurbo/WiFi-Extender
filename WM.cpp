@@ -110,7 +110,7 @@ void WM::create_server() {
         serializeJson(Config, output);
         Serial.print(output);
 
-        String path = "/config.json";
+        String path = CONFIG_FILE;
 
         #if DEBUG_PROC
         Serial.printf("DEBUG: Writing file: %s\n", path);
@@ -121,7 +121,7 @@ void WM::create_server() {
             #if DEBUG_PROC
             Serial.println("DEBUG: Failed to open file for writing");
             #endif
-            return "null";
+            return "undefined";
         }
         #if DEBUG_PROC
         if (file.print(output))
@@ -138,7 +138,7 @@ void WM::create_server() {
 
 String WM::get_credentials(int a) {
       // a: 0=ssid, 1=pass; 2=ap name
-      String path = "/config.json";
+      String path = CONFIG_FILE;
       String credentials = "";
 
       #if DEBUG_PROC
@@ -163,7 +163,7 @@ String WM::get_credentials(int a) {
       auto error = deserializeJson(Config, credentials);
       if (error) {
          Serial.println("ERROR: Failed to parse JSON config file!");
-        return "err";
+        return "undefined";
       }
       file.close();
       String credential_array [3] = {Config["ssid"], Config["pass"], Config["ap"]};
