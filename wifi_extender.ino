@@ -1,4 +1,3 @@
-
 /* 
  *  Author: Pius Onyema Ndukwu
  *  License: MIT License
@@ -96,6 +95,28 @@ void TriggerBuzzer(int _delay, bool _infinite = false, int _count = 3) {
 }
 #endif
 
+ unsigned char clientCount = 0; 
+void clientStatus() {
+    struct station_info *stat_info = wifi_softap_get_station_info();
+    int i = 0;
+
+    while (stat_info != NULL) {
+        i++;
+
+        Serial.printf("\nINFO: (client = %d)IP Address = %s with mac adress is = ", i, IPAddress((&stat_info->ip)->addr).toString().c_str());
+        for (int i = 0; i < 6; ++i) {
+            Serial.printf("%02X", stat_info->bssid[i]);
+            if (i < 5)
+                Serial.print(":");
+        }
+
+        stat_info = STAILQ_NEXT(stat_info, next);
+        Serial.println();
+    }
+    wifi_softap_free_station_info();
+    delay(500);
+}
+
 void setup() {
     delay(1000);
     pinMode(0,INPUT_PULLUP);
@@ -175,20 +196,22 @@ void setup() {
   else
   {
       WiFi.mode(WIFI_STA);
-      WiFi.begin(ssid, pass); // check function to understand
+      WiFi.begin(ssid, pass);
       #if DEBUG_PROC
-      IPAddress StationIP = WiFi.localIP();
-     Serial.printf("\nDEBUG: Station IP Address: %s", StationIP.toString().c_str());
+      Serial.printf("\nDEBUG: Local IP Address: %s", IPAddress(WiFi.localIP()).toString().c_str());
+      Serial.printf("\nDEBUG: Subnet IP Address: %s", IPAddress(WiFi.subnetMask()).toString().c_str());
+      Serial.printf("\nDEBUG: Gataway IP Address: %s\n", WiFi.gatewayIP().toString().c_str());
+      Serial.printf("\nDEBUG: Station RSSI: %d dBm\n", WiFi.RSSI());
       #endif
       int timeout_counter=0;
       Serial.print("\nINFO: Waiting for connection to WiFi");
       while (WiFi.status() != WL_CONNECTED) {
           if(timeout_counter>=WAIT_TIMEOUT)
-              goto start_webserver; // if it fails to connect start_webserver
+              goto start_webserver;
 
       Serial.print('.');
       timeout_counter++;
-      digitalWrite(LED_BUILTIN, LOW);// leave led on when trying to connect
+      digitalWrite(LED_BUILTIN, LOW);
       delay(500);
     }
 
@@ -260,6 +283,14 @@ void setup() {
 #endif
             
 void loop() {
+    if (WiFi.status() == WL_CONNECTED) {
+        if(clientCount != wifi_softap_get_station_num())
+        {
+            clientCount = wifi_softap_get_station_num();
+            Serial.printf(" \nTotal connected clients are %d ", clientCount);
+            clientStatus();
+        }
+    }
     if(digitalRead(0)==LOW){
         LittleFS.format();
         ESP.restart();
