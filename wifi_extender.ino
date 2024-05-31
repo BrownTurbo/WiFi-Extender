@@ -77,7 +77,7 @@ void InitSerial() {
     Serial.setDebugOutput(DEBUG_PROC);
 }
 
-#if BUZZER_ENABLED    
+#if BUZZER_ENABLED
 void TriggerBuzzer(int _delay, bool _infinite, int _count);
 void TriggerBuzzer(int _delay, bool _infinite = false, int _count = 3) {
     #if DEBUG_PROC
@@ -95,7 +95,8 @@ void TriggerBuzzer(int _delay, bool _infinite = false, int _count = 3) {
 }
 #endif
 
- unsigned char clientCount = 0; 
+unsigned char clientCount = 0; 
+void  clientStatus();
 void clientStatus() {
     struct station_info *stat_info = wifi_softap_get_station_info();
     int i = 0;
@@ -103,7 +104,7 @@ void clientStatus() {
     while (stat_info != NULL) {
         i++;
 
-        Serial.printf("\nINFO: (client = %d)IP Address = %s with mac adress is = ", i, IPAddress((&stat_info->ip)->addr).toString().c_str());
+        Serial.printf("\nINFO: (client = %d)IP Address = %s with MAC Address is = ", i, IPAddress((&stat_info->ip)->addr).toString().c_str());
         for (int i = 0; i < 6; ++i) {
             Serial.printf("%02X", stat_info->bssid[i]);
             if (i < 5)
@@ -117,8 +118,87 @@ void clientStatus() {
     delay(500);
 }
 
+void StartWebserver() {
+        #if DEBUG_PROC
+        uint8_t macAddress[6];
+        WiFi.macAddress(macAddress);
+        Serial.print("\nDEBUG: MAC Address: ");
+        for (int i = 0; i < 6; ++i) {
+            Serial.printf("%02X", macAddress[i]);
+            if (i < 5)
+                Serial.print(":");
+        }
+        #endif
+        WiFi.softAP(DefaultWiFi);
+        #if DEBUG_PROC
+        IPAddress AccessPointIP = WiFi.softAPIP();
+        Serial.printf("\nDEBUG: AP IP address: %s", AccessPointIP.toString().c_str());
+        #endif
+        my_wifi.create_server();
+        //server.begin();
+        my_wifi.begin_server();
+        #if DEBUG_PROC
+        Serial.printf("\nDEBUG: HTTP server started on port %d", WEBsrv_PORT);
+        #endif
+        delay_time=1000; // blink every sec if webserver is active
+}
+
+bool WaitWiFiConnection() {
+    int timeout_counter=0;
+      Serial.print("\nINFO: Waiting for connection to WiFi");
+      while (WiFi.status() != WL_CONNECTED) {
+          int ConnectionStatus = WiFi.waitForConnectResult();
+          switch (ConnectionStatus) {
+              /*case WL_CONNECT_WRONG_PASSWORD: {
+                  Serial.print("\nERROR: Wrong WiFi Password!");
+                  timeout_counter = WAIT_TIMEOUT;
+                  break;
+             }*/
+            case WL_NO_SSID_AVAIL: {
+                 Serial.print("\nERROR: SSID can't be reached!");
+                 timeout_counter = WAIT_TIMEOUT;
+                #if BUZZER_ENABLED
+                TriggerBuzzer(1000, true);
+                #endif
+                 break;
+            }
+            case WL_CONNECT_FAILED: {
+                 Serial.print("\nERROR: Failed to connect to WiFi!");
+                 timeout_counter = WAIT_TIMEOUT;
+                 #if BUZZER_ENABLED
+                 TriggerBuzzer(1000, true);
+                 #endif
+                 break;
+            }
+            case -1: {
+                 Serial.print("\nERROR: Timeout on connecting to WiFi!");
+                 timeout_counter = WAIT_TIMEOUT;
+                 #if BUZZER_ENABLED
+                 TriggerBuzzer(1000, true);
+                 #endif
+                 break;
+             }
+          }
+          if(timeout_counter>=WAIT_TIMEOUT) {
+              Serial.print("\nERROR: Timeout on connecting to WiFi!");
+              #if BUZZER_ENABLED
+              TriggerBuzzer(2000, false, 5);
+              #endif
+              StartWebserver();
+          }
+
+          Serial.print('.');
+          timeout_counter++;
+          digitalWrite(LED_BUILTIN, LOW);
+          delay(WIFI_RECONNECT_TIMER);
+    }
+    return (WiFi.isConnected());
+}
+
 void setup() {
-    delay(1000);
+    #if STARTUP_DELAY >= 500
+    delay(STARTUP_DELAY);
+    #endif
     pinMode(0,INPUT_PULLUP);
     pinMode(LED_BUILTIN,OUTPUT);
     //pinMode(BUZZER_PIN, OUTPUT);
@@ -163,57 +243,29 @@ void setup() {
 
     if (ssid == "undefined") {
         // if the file does not exist, ssid will be undefined
-    start_webserver:
-        #if DEBUG_PROC
-        uint8_t macAddress[6];
-        WiFi.macAddress(macAddress);
-        Serial.print("\nDEBUG: MAC Address: ");
-        for (int i = 0; i < 6; ++i) {
-            Serial.printf("%02X", macAddress[i]);
-            if (i < 5)
-                Serial.print(":");
-        }
-        #endif
-        WiFi.softAP(DefaultWiFi);
-        #if DEBUG_PROC
-        IPAddress AccessPointIP = WiFi.softAPIP();
-        Serial.printf("\nDEBUG: AP IP address: %s", AccessPointIP.toString().c_str());
-        #endif
-        my_wifi.create_server();
-        //server.begin();
-        my_wifi.begin_server();
-        #if DEBUG_PROC
-        Serial.printf("\nDEBUG: HTTP server started on port %d", WEBsrv_PORT);
-        #endif
-        delay_time=1000; // blink every sec if webserver is active
+        StartWebserver();
+        
   }
   else if (ssid == "null") {
         // if the JSON parser failed, ssid will be null
         Serial.print("\nNOTICE: temporary reversing configurations to defaults...");
-        goto start_webserver;
+        StartWebserver();
         delay_time=500; // blink every half second
   }
   else
   {
       WiFi.mode(WIFI_STA);
-      WiFi.begin(ssid, pass);
+      WiFi.begin(ssid, pass, WiFiChannel);
+      WiFi.setAutoConnect(WIFI_AUTOCONNECT);
+      WiFi.setAutoReconnect(WIFI_AUTORECONNECT);
       #if DEBUG_PROC
       Serial.printf("\nDEBUG: Local IP Address: %s", IPAddress(WiFi.localIP()).toString().c_str());
       Serial.printf("\nDEBUG: Subnet IP Address: %s", IPAddress(WiFi.subnetMask()).toString().c_str());
-      Serial.printf("\nDEBUG: Gataway IP Address: %s\n", WiFi.gatewayIP().toString().c_str());
+      Serial.printf("\nDEBUG: Gataway IP Address: %s\n", IPAddress(WiFi.gatewayIP()).toString().c_str());
       Serial.printf("\nDEBUG: Station RSSI: %d dBm\n", WiFi.RSSI());
-      #endif
-      int timeout_counter=0;
-      Serial.print("\nINFO: Waiting for connection to WiFi");
-      while (WiFi.status() != WL_CONNECTED) {
-          if(timeout_counter>=WAIT_TIMEOUT)
-              goto start_webserver;
-
-      Serial.print('.');
-      timeout_counter++;
-      digitalWrite(LED_BUILTIN, LOW);
-      delay(500);
-    }
+      Serial.printf("\nDEBUG: Station SSID: %s", WiFi.SSID());
+    #endif
+    WaitWiFiConnection();
 
     #if LWIP_DHCP_AP
     // give DNS servers to AP side
@@ -228,44 +280,48 @@ void setup() {
                   WiFi.dnsIP(0).toString().c_str(),
                   WiFi.dnsIP(1).toString().c_str());
                 
+    #if STATIC_DHCP_AP
     IPAddress __localIP(192,168,1,50); // 172, 217, 28, 254
     IPAddress __Gateway(192,168,1,1); // 172, 217, 28, 254
     IPAddress __Subnet(255,255,255,0);
 
-    Serial.printf("\nINFO: Setting Access point configuration ... %s", (WiFi.softAPConfig(__localIP, __Gateway, __Subnet) ? "Ready" : "Failed"));
+    Serial.printf("\nINFO: Setting Access point DHCP configuration ... %s", (WiFi.softAPConfig(__localIP, __Gateway, __Subnet) ? "Ready" : "Failed"));
+    #endif
     Serial.printf("\nINFO: Setting Access point ... %s", (WiFi.softAP(ap, pass, WiFiChannel, WiFiHidden, MaxWiFiConnections) ? "Ready" : "Failed"));
-
-       #if DEBUG_PROC
-       Serial.printf("\nDEBUG: Heap before: %d", ESP.getFreeHeap());
-       #endif
-      err_t ret = ip_napt_init(NAPT, NAPT_PORT);
-      #if DEBUG_PROC
-      Serial.printf("\nDEBUG: ip_napt_init(%d,%d): ret=%d (OK=%d)\n", NAPT, NAPT_PORT, (int)ret, (int)ERR_OK);
-      #endif
-      if (ret == ERR_OK) {
-          ret = ip_napt_enable_no(SOFTAP_IF, 1);
-          #if DEBUG_PROC
-          Serial.printf("\nDEBUG: ip_napt_enable_no(SOFTAP_IF): ret=%d (OK=%d)\n", (int)ret, (int)ERR_OK);
-          #endif
-          if (ret == ERR_OK) {
-                Serial.printf("\nINFO: Successfully NATed to WiFi Network '%s' with the same password", ssid.c_str());
-                #if BUZZER_ENABLED
-                TriggerBuzzer(1000,false, 2);
-                #endif
-           }
-      }
-      #if DEBUG_PROC
-      Serial.printf("\nDEBUG: Heap after napt init: %d", ESP.getFreeHeap());
-      #endif
-      if (ret != ERR_OK) {
-          Serial.print("\nERROR: NAPT initialization failed");
-          #if BUZZER_ENABLED
-          TriggerBuzzer(1000, true);
-          #endif
-          delay_time = 2500;
-          return;
-      }
-      delay_time=500; // blink every half second if connection was succesfull
+        
+    #if DEBUG_PROC
+    Serial.printf("\nDEBUG: Setting Station Hostname ... %s", (WiFi.hostname(WIFI_STA_HOSTNAME) ? "OK" : "Failed"));
+       
+    Serial.printf("\nDEBUG: Heap before: %d", ESP.getFreeHeap());
+    #endif
+    err_t ret = ip_napt_init(NAPT, NAPT_PORT);
+    #if DEBUG_PROC
+    Serial.printf("\nDEBUG: ip_napt_init(%d,%d): ret=%d (OK=%d)\n", NAPT, NAPT_PORT, (int)ret, (int)ERR_OK);
+    #endif
+    if (ret == ERR_OK) {
+        ret = ip_napt_enable_no(SOFTAP_IF, 1);
+        #if DEBUG_PROC
+        Serial.printf("\nDEBUG: ip_napt_enable_no(SOFTAP_IF): ret=%d (OK=%d)\n", (int)ret, (int)ERR_OK);
+        #endif
+        if (ret == ERR_OK) {
+              Serial.printf("\nINFO: Successfully NATed to WiFi Network '%s' with the same password", ssid.c_str());
+              #if BUZZER_ENABLED
+              TriggerBuzzer(1000,false, 2);
+              #endif
+         }
+    }
+    #if DEBUG_PROC
+    Serial.printf("\nDEBUG: Heap after napt init: %d", ESP.getFreeHeap());
+    #endif
+    if (ret != ERR_OK) {
+        Serial.print("\nERROR: NAPT initialization failed");
+        #if BUZZER_ENABLED
+        TriggerBuzzer(1000, true);
+        #endif
+        delay_time = 2500;
+        return;
+    }
+    delay_time=500; // blink every half second if connection was succesfull
   }
   RepeaterIsWorking=true;
 }
@@ -283,7 +339,7 @@ void setup() {
 #endif
             
 void loop() {
-    if (WiFi.status() == WL_CONNECTED) {
+    if (WiFi.isConnected()) {
         if(clientCount != wifi_softap_get_station_num())
         {
             clientCount = wifi_softap_get_station_num();
@@ -291,6 +347,17 @@ void loop() {
             clientStatus();
         }
     }
+    #if WIFI_AUTORECONNECT
+    else {
+        #if BUZZER_ENABLED
+        TriggerBuzzer(1000, false, 3);
+        #endif
+        if (WiFi.status() != WL_IDLE_STATUS) {
+            WiFi.reconnect();
+            WaitWiFiConnection();
+        }
+    }
+    #endif
     if(digitalRead(0)==LOW){
         LittleFS.format();
         ESP.restart();
