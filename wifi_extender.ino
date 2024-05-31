@@ -58,6 +58,7 @@ WM my_wifi;
 void InitSerial();
 void InitSerial() {
     Serial.begin(BAUD_RATE);
+
     // There must be activity on the serial port for the baudrate to be detected
     unsigned long detectedBaudrate = Serial.detectBaudrate(SERIAL_TIMEOUT);
 
@@ -73,6 +74,9 @@ void InitSerial() {
 
         // After this, any writing to Serial will print gibberish on the serial monitor if the baudrate doesn't match
         Serial.begin(detectedBaudrate);
+        #if DEBUG_PROC
+        Serial.printf("\nDEBUG: Serial is %d bps", detectedBaudrate);
+        #endif
     }
     Serial.setDebugOutput(DEBUG_PROC);
 }
@@ -99,12 +103,11 @@ unsigned char clientCount = 0;
 void  clientStatus();
 void clientStatus() {
     struct station_info *stat_info = wifi_softap_get_station_info();
-    int i = 0;
+    int clientID = 0;
 
     while (stat_info != NULL) {
-        i++;
-
-        Serial.printf("\nINFO: (client = %d)IP Address = %s with MAC Address is = ", i, IPAddress((&stat_info->ip)->addr).toString().c_str());
+        clientID++;
+        Serial.printf("\nINFO: (client = %d)IP Address = %s with MAC Address is = ", clientID, IPAddress((&stat_info->ip)->addr).toString().c_str());
         for (int i = 0; i < 6; ++i) {
             Serial.printf("%02X", stat_info->bssid[i]);
             if (i < 5)
@@ -158,7 +161,7 @@ bool WaitWiFiConnection() {
                  Serial.print("\nERROR: SSID can't be reached!");
                  timeout_counter = WAIT_TIMEOUT;
                 #if BUZZER_ENABLED
-                TriggerBuzzer(1000, true);
+                TriggerBuzzer(1000, false, 5);
                 #endif
                  break;
             }
@@ -166,7 +169,7 @@ bool WaitWiFiConnection() {
                  Serial.print("\nERROR: Failed to connect to WiFi!");
                  timeout_counter = WAIT_TIMEOUT;
                  #if BUZZER_ENABLED
-                 TriggerBuzzer(1000, true);
+                 TriggerBuzzer(1000, false, 5);
                  #endif
                  break;
             }
@@ -174,7 +177,7 @@ bool WaitWiFiConnection() {
                  Serial.print("\nERROR: Timeout on connecting to WiFi!");
                  timeout_counter = WAIT_TIMEOUT;
                  #if BUZZER_ENABLED
-                 TriggerBuzzer(1000, true);
+                 TriggerBuzzer(1000, false, 5);
                  #endif
                  break;
              }
@@ -201,14 +204,16 @@ void setup() {
     #endif
     pinMode(0,INPUT_PULLUP);
     pinMode(LED_BUILTIN,OUTPUT);
-    //pinMode(BUZZER_PIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, HIGH); //active low
+    #if BUZZER_ENABLED
+    pinMode(BUZZER_PIN, OUTPUT);
+    #endif
+    digitalWrite(LED_BUILTIN, HIGH);
     InitSerial();
     
      if (WiFi.status() == WL_NO_SHIELD) {
         Serial.println("ERROR: WiFi shield not present");
         #if BUZZER_ENABLED
-        TriggerBuzzer(1000, true);
+        TriggerBuzzer(1000, false, 5);
         #endif
         delay_time = 4000;
         return;
@@ -220,24 +225,22 @@ void setup() {
     if (!LittleFS.begin()) {
         Serial.println("ERROR: LittleFS mount failed");
         #if BUZZER_ENABLED
-        TriggerBuzzer(1000, true);
+        TriggerBuzzer(1000, false, 5);
         #endif
         delay_time = 4000;
         return;
     }
 
-    Serial.printf("\n\nNAPT Range extender\n");
+    Serial.printf("\n\nNAPT Range extender");
     #if DEBUG_PROC
-    Serial.printf("DEBUG: Heap on start: %d\n", ESP.getFreeHeap());
+    Serial.printf("\nDEBUG: Heap on start: %d", ESP.getFreeHeap());
     #endif
 
 #if HAVE_NETDUMP
     phy_capture = dump;
 #endif
-
-    // first, connect to STA so we can get a proper local DNS server
     
-   String ssid = my_wifi.get_credentials(0); // if the file does not exist the function will always return null
+   String ssid = my_wifi.get_credentials(0);
    String pass = my_wifi.get_credentials(1);
    String ap = my_wifi.get_credentials(2);
 
@@ -261,9 +264,9 @@ void setup() {
       #if DEBUG_PROC
       Serial.printf("\nDEBUG: Local IP Address: %s", IPAddress(WiFi.localIP()).toString().c_str());
       Serial.printf("\nDEBUG: Subnet IP Address: %s", IPAddress(WiFi.subnetMask()).toString().c_str());
-      Serial.printf("\nDEBUG: Gataway IP Address: %s\n", IPAddress(WiFi.gatewayIP()).toString().c_str());
-      Serial.printf("\nDEBUG: Station RSSI: %d dBm\n", WiFi.RSSI());
-      Serial.printf("\nDEBUG: Station SSID: %s", WiFi.SSID());
+      Serial.printf("\nDEBUG: Gataway IP Address: %s", IPAddress(WiFi.gatewayIP()).toString().c_str());
+      Serial.printf("\nDEBUG: Station RSSI: %d dBm", WiFi.RSSI());
+      Serial.printf("\nDEBUG: Station SSID: %s", WiFi.SSID().c_str());
     #endif
     WaitWiFiConnection();
 
@@ -281,8 +284,8 @@ void setup() {
                   WiFi.dnsIP(1).toString().c_str());
                 
     #if STATIC_DHCP_AP
-    IPAddress __localIP(192,168,1,50); // 172, 217, 28, 254
-    IPAddress __Gateway(192,168,1,1); // 172, 217, 28, 254
+    IPAddress __localIP(172, 217, 28, 254); // 172, 217, 28, 254
+    IPAddress __Gateway(172, 217, 28, 254); // 172, 217, 28, 254
     IPAddress __Subnet(255,255,255,0);
 
     Serial.printf("\nINFO: Setting Access point DHCP configuration ... %s", (WiFi.softAPConfig(__localIP, __Gateway, __Subnet) ? "Ready" : "Failed"));
@@ -316,7 +319,7 @@ void setup() {
     if (ret != ERR_OK) {
         Serial.print("\nERROR: NAPT initialization failed");
         #if BUZZER_ENABLED
-        TriggerBuzzer(1000, true);
+        TriggerBuzzer(1000, false, 5);
         #endif
         delay_time = 2500;
         return;
