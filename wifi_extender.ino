@@ -85,13 +85,14 @@ void InitSerial() {
 void TriggerBuzzer(int _delay, bool _infinite, int _count);
 void TriggerBuzzer(int _delay, bool _infinite = false, int _count = 3) {
     #if DEBUG_PROC
-    Serial.println("DEBUG: Buzzer is triggered!");
+    Serial.println("\nDEBUG: Buzzer is triggered!");
     #endif
     int __count = 0;
     while (true) {
         digitalWrite(BUZZER_PIN, HIGH);
         delay(_delay);
         digitalWrite(BUZZER_PIN, LOW);
+        delay(_delay);
         __count += 1;
         if(!_infinite && _count > 0 && __count >= _count)
             break;
@@ -121,17 +122,8 @@ void clientStatus() {
     delay(500);
 }
 
+void StartWebserver();
 void StartWebserver() {
-        #if DEBUG_PROC
-        uint8_t macAddress[6];
-        WiFi.macAddress(macAddress);
-        Serial.print("\nDEBUG: MAC Address: ");
-        for (int i = 0; i < 6; ++i) {
-            Serial.printf("%02X", macAddress[i]);
-            if (i < 5)
-                Serial.print(":");
-        }
-        #endif
         WiFi.softAP(DefaultWiFi);
         #if DEBUG_PROC
         IPAddress AccessPointIP = WiFi.softAPIP();
@@ -143,9 +135,10 @@ void StartWebserver() {
         #if DEBUG_PROC
         Serial.printf("\nDEBUG: HTTP server started on port %d", WEBsrv_PORT);
         #endif
-        delay_time=1000; // blink every sec if webserver is active
+        //delay_time = 1000; // blink every sec if webserver is active
 }
 
+bool WaitWiFiConnection();
 bool WaitWiFiConnection() {
     int timeout_counter=0;
       Serial.print("\nINFO: Waiting for connection to WiFi");
@@ -198,6 +191,27 @@ bool WaitWiFiConnection() {
     return (WiFi.isConnected());
 }
 
+void PrintMacAddresses();
+void PrintMacAddresses() {
+       #if DEBUG_PROC
+        uint8_t macAddress[6];
+        WiFi.macAddress(macAddress);
+        Serial.print("\nDEBUG: Station MAC Address: ");
+        for (int i = 0; i < 6; ++i) {
+            Serial.printf("%02X", macAddress[i]);
+            if (i < 5)
+                Serial.print(":");
+        }
+        WiFi.softAPmacAddress(macAddress);
+        Serial.print("\nDEBUG: Access point MAC Address: ");
+        for (int i = 0; i < 6; ++i) {
+            Serial.printf("%02X", macAddress[i]);
+            if (i < 5)
+                Serial.print(":");
+        }
+        #endif
+}
+
 void setup() {
     #if STARTUP_DELAY >= 500
     delay(STARTUP_DELAY);
@@ -247,17 +261,24 @@ void setup() {
     if (ssid == "undefined") {
         // if the file does not exist, ssid will be undefined
         StartWebserver();
-        
+        PrintMacAddresses();
+        delay_time = 1500;
   }
   else if (ssid == "null") {
         // if the JSON parser failed, ssid will be null
         Serial.print("\nNOTICE: temporary reversing configurations to defaults...");
         StartWebserver();
-        delay_time=500; // blink every half second
+        PrintMacAddresses();
+        delay_time=3000; // blink every half second
   }
   else
   {
       WiFi.mode(WIFI_STA);
+      PrintMacAddresses();
+      #if DEBUG_PROC
+      Serial.printf("\nDEBUG: Default hostname: %s\n", WiFi.hostname().c_str());
+      #endif
+      Serial.printf("\nINFO: Setting Station Hostname ... %s", (WiFi.hostname(WIFI_STA_HOSTNAME) ? "OK" : "Failed"));
       WiFi.begin(ssid, pass, WiFiChannel);
       WiFi.setAutoConnect(WIFI_AUTOCONNECT);
       WiFi.setAutoReconnect(WIFI_AUTORECONNECT);
@@ -279,7 +300,7 @@ void setup() {
     dhcps_set_dns(1, WiFi.dnsIP(1));
      #endif
 
-    Serial.printf("\nStation DNS: %s & %s\n",
+    Serial.printf("\nStation DNS: %s & %s",
                   WiFi.dnsIP(0).toString().c_str(),
                   WiFi.dnsIP(1).toString().c_str());
                 
@@ -293,18 +314,16 @@ void setup() {
     Serial.printf("\nINFO: Setting Access point ... %s", (WiFi.softAP(ap, pass, WiFiChannel, WiFiHidden, MaxWiFiConnections) ? "Ready" : "Failed"));
         
     #if DEBUG_PROC
-    Serial.printf("\nDEBUG: Setting Station Hostname ... %s", (WiFi.hostname(WIFI_STA_HOSTNAME) ? "OK" : "Failed"));
-       
     Serial.printf("\nDEBUG: Heap before: %d", ESP.getFreeHeap());
     #endif
     err_t ret = ip_napt_init(NAPT, NAPT_PORT);
     #if DEBUG_PROC
-    Serial.printf("\nDEBUG: ip_napt_init(%d,%d): ret=%d (OK=%d)\n", NAPT, NAPT_PORT, (int)ret, (int)ERR_OK);
+    Serial.printf("\nDEBUG: ip_napt_init(%d,%d): ret=%d (OK=%d)", NAPT, NAPT_PORT, (int)ret, (int)ERR_OK);
     #endif
     if (ret == ERR_OK) {
         ret = ip_napt_enable_no(SOFTAP_IF, 1);
         #if DEBUG_PROC
-        Serial.printf("\nDEBUG: ip_napt_enable_no(SOFTAP_IF): ret=%d (OK=%d)\n", (int)ret, (int)ERR_OK);
+        Serial.printf("\nDEBUG: ip_napt_enable_no(SOFTAP_IF): ret=%d (OK=%d)", (int)ret, (int)ERR_OK);
         #endif
         if (ret == ERR_OK) {
               Serial.printf("\nINFO: Successfully NATed to WiFi Network '%s' with the same password", ssid.c_str());
