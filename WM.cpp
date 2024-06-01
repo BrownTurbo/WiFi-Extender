@@ -134,7 +134,7 @@ void WM::create_server() {
 
         file.close();
       });
-    }
+}
 
 String WM::get_credentials(int a) {
       // a: 0=ssid, 1=pass; 2=ap name
@@ -163,9 +163,9 @@ String WM::get_credentials(int a) {
       auto error = deserializeJson(Config, credentials);
       if (error) {
          Serial.println("ERROR: Failed to parse JSON config file!");
-        return "undefined";
+         return "undefined";
       }
       file.close();
-      String credential_array [3] = {Config["ssid"], Config["pass"], Config["ap"]};
-      return credential_array[a];
+      String _Credentials[3] = { Config["ssid"], Config["pass"], Config["ap"] };
+      return _Credentials[a];
 }
