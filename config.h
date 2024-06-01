@@ -2,10 +2,10 @@
 #define CONFIG_H
 
 #define DEBUG_PROC true
-#define STARTUP_DELAY 1000
 
 #define WEBsrv_PORT 4500
 
+#define STARTUP_DELAY 1000
 #define WAIT_TIMEOUT 120
 #define BAUD_RATE 115200
 #define SERIAL_TIMEOUT (10000UL)  // Maximum time to wait for serial activity to start
@@ -18,12 +18,17 @@
 #define WIFI_AUTORECONNECT true
 #define WIFI_RECONNECT_TIMER 500
 #define WIFI_STA_HOSTNAME "Beast's AP"
-#define STATIC_DHCP_AP true
+#define STATIC_DHCP_AP false
 
 #define BUZZER_PIN 13 //GPIO 13 = D7
-#define BUZZER_ENABLED false
-
+#define BUZZER_ENABLED true
 
 #define CONFIG_FILE "/config.json"
+
+#define HAVE_NETDUMP 0
+#define LWIP_DHCP_AP 0
+
+#define NAPT 1000
+#define NAPT_PORT 10
 
 #endif
