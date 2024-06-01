@@ -18,23 +18,21 @@ long delay_time=0; // interval between blinks
 //led is on when trying to connect to router.
 int connectedStations = 0;
 
+unsigned long lastConnectTry = 0;
+uint8_t lastStatus = NULL;
+
 /* Set these to your desired credentials. */
 
 #if LWIP_FEATURES && !LWIP_IPV6
 
-#define HAVE_NETDUMP 0
 #include <lwip/napt.h>
 #include <lwip/dns.h>
 
-#define LWIP_DHCP_AP 0
 #if LWIP_DHCP_AP
 #include <LwipDhcpServer.h>
 #else
 #include <dhcpserver.h>
 #endif
-
-#define NAPT 1000
-#define NAPT_PORT 10
 
 #if HAVE_NETDUMP
 
@@ -63,7 +61,7 @@ void InitSerial() {
     unsigned long detectedBaudrate = Serial.detectBaudrate(SERIAL_TIMEOUT);
 
     if (detectedBaudrate) {
-        Serial.printf("\nNOTICE: Detected baudrate is %lu, switching to that baudrate now...\n", detectedBaudrate);
+        Serial.printf("\nNOTICE: Detected baudrate is %lu, switching to that baudrate now...", detectedBaudrate);
 
         // Wait for printf to finish
         while (Serial.availableForWrite() != UART_TX_FIFO_SIZE)
@@ -130,7 +128,6 @@ void StartWebserver() {
         Serial.printf("\nDEBUG: AP IP address: %s", AccessPointIP.toString().c_str());
         #endif
         my_wifi.create_server();
-        //server.begin();
         my_wifi.begin_server();
         #if DEBUG_PROC
         Serial.printf("\nDEBUG: HTTP server started on port %d", WEBsrv_PORT);
@@ -160,6 +157,14 @@ bool WaitWiFiConnection() {
             }
             case WL_CONNECT_FAILED: {
                  Serial.print("\nERROR: Failed to connect to WiFi!");
+                 timeout_counter = WAIT_TIMEOUT;
+                 #if BUZZER_ENABLED
+                 TriggerBuzzer(1000, false, 5);
+                 #endif
+                 break;
+            }
+            case WL_CONNECTION_LOST: {
+                 Serial.print("\nERROR: Lost Connection to WiFi!");
                  timeout_counter = WAIT_TIMEOUT;
                  #if BUZZER_ENABLED
                  TriggerBuzzer(1000, false, 5);
@@ -255,7 +260,7 @@ void setup() {
 #endif
     
    String ssid = my_wifi.get_credentials(0);
-   String pass = my_wifi.get_credentials(1);
+   String pass =my_wifi.get_credentials(1);
    String ap = my_wifi.get_credentials(2);
 
     if (ssid == "undefined") {
@@ -264,7 +269,7 @@ void setup() {
         PrintMacAddresses();
         delay_time = 1500;
   }
-  else if (ssid == "null") {
+  else if (ssid == "null" || strlen(ssid.c_str()) > 1) {
         // if the JSON parser failed, ssid will be null
         Serial.print("\nNOTICE: temporary reversing configurations to defaults...");
         StartWebserver();
@@ -298,15 +303,17 @@ void setup() {
     #else
     dhcps_set_dns(0, WiFi.dnsIP(0));
     dhcps_set_dns(1, WiFi.dnsIP(1));
-     #endif
+    #endif
+    // auto& _DHCPserver = WiFi.softAPDhcpServer();
+     //_DHCPserver.setDns(WiFi.dnsIP(0), WiFi.dnsIP(1));
 
     Serial.printf("\nStation DNS: %s & %s",
                   WiFi.dnsIP(0).toString().c_str(),
                   WiFi.dnsIP(1).toString().c_str());
                 
     #if STATIC_DHCP_AP
-    IPAddress __localIP(172, 217, 28, 254); // 172, 217, 28, 254
-    IPAddress __Gateway(172, 217, 28, 254); // 172, 217, 28, 254
+    IPAddress __localIP(192,168,4,2); // 172, 217, 28, 254
+    IPAddress __Gateway(192,168,4,1); // 172, 217, 28, 254
     IPAddress __Subnet(255,255,255,0);
 
     Serial.printf("\nINFO: Setting Access point DHCP configuration ... %s", (WiFi.softAPConfig(__localIP, __Gateway, __Subnet) ? "Ready" : "Failed"));
@@ -332,20 +339,21 @@ void setup() {
               #endif
          }
     }
-    #if DEBUG_PROC
-    Serial.printf("\nDEBUG: Heap after napt init: %d", ESP.getFreeHeap());
-    #endif
-    if (ret != ERR_OK) {
+    else {
         Serial.print("\nERROR: NAPT initialization failed");
         #if BUZZER_ENABLED
         TriggerBuzzer(1000, false, 5);
         #endif
         delay_time = 2500;
+        RepeaterIsWorking = true;
         return;
     }
-    delay_time=500; // blink every half second if connection was succesfull
+    #if DEBUG_PROC
+    Serial.printf("\nDEBUG: Heap after napt init: %d", ESP.getFreeHeap());
+    #endif
+    delay_time = 500; // blink every half second if connection was succesfull
   }
-  RepeaterIsWorking=true;
+  RepeaterIsWorking = true;
 }
 
 #else
@@ -375,7 +383,10 @@ void loop() {
         TriggerBuzzer(1000, false, 3);
         #endif
         if (WiFi.status() != WL_IDLE_STATUS) {
-            WiFi.reconnect();
+            if (millis() > (lastConnectTry + 3000)) {
+                WiFi.reconnect();
+                lastConnectTry = millis();
+            }
             WaitWiFiConnection();
         }
     }
