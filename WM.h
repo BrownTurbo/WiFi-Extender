@@ -17,13 +17,15 @@
 
 class WM {
   public:
-  
+
 //  JsonObject obj = Config.as<JsonObject>();
   void listDir(const char * dirname);
   void begin_server();
   void create_server();
   String get_credentials(int a);
-  
+
 };
+
+String encType(int id);
 
 #endif
