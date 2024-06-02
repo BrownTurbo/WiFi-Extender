@@ -19,7 +19,9 @@ long delay_time=0; // interval between blinks
 int connectedStations = 0;
 
 unsigned long lastConnectTry = 0;
+#if DEBUG_PROC
 uint8_t lastStatus = NULL;
+#endif
 
 /* Set these to your desired credentials. */
 
@@ -269,7 +271,7 @@ void setup() {
         PrintMacAddresses();
         delay_time = 1500;
   }
-  else if (ssid == "null" || strlen(ssid.c_str()) > 1) {
+  else if (ssid == "null" || strlen(ssid.c_str()) < 1 || strlen(ap.c_str()) < 1) {
         // if the JSON parser failed, ssid will be null
         Serial.print("\nNOTICE: temporary reversing configurations to defaults...");
         StartWebserver();
@@ -369,6 +371,13 @@ void setup() {
 #endif
             
 void loop() {
+    #if DEBUG_PROC
+    if (lastStatus != WiFi.status()) {
+        Serial.printf("\nDEBUG: OLD WiFi status: %d", lastStatus);
+        lastStatus = WiFi.status();
+        Serial.printf("\nDEBUG: NEW WiFi status: %d", lastStatus);
+    }
+    #endif
     if (WiFi.isConnected()) {
         if(clientCount != wifi_softap_get_station_num())
         {
@@ -384,6 +393,7 @@ void loop() {
         #endif
         if (WiFi.status() != WL_IDLE_STATUS) {
             if (millis() > (lastConnectTry + 3000)) {
+                Serial.println("Reconnecting to WiFi...");
                 WiFi.reconnect();
                 lastConnectTry = millis();
             }
