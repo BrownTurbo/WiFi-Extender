@@ -372,7 +372,7 @@ void setup() {
             
 void loop() {
     #if DEBUG_PROC
-    if (lastStatus != WiFi.status()) {
+    if (lastStatus != WiFi.status() && lastStatus != NULL) {
         Serial.printf("\nDEBUG: OLD WiFi status: %d", lastStatus);
         lastStatus = WiFi.status();
         Serial.printf("\nDEBUG: NEW WiFi status: %d", lastStatus);
