@@ -4,6 +4,36 @@ AsyncWebServer server(WEBsrv_PORT);
 DynamicJsonDocument Config(2048);
 JsonObject obj = Config.as<JsonObject>();
 
+String encType(int id){
+    String type;
+    switch(WiFi.encryptionType(id)) {
+        case ENC_TYPE_WEP: {
+            type = "WEP";
+            break;
+        }
+        case ENC_TYPE_TKIP: {
+            type = "WPA / PSK";
+            break;
+         }
+         case ENC_TYPE_CCMP: {
+             type = "WPA2 / PSK";
+             break;
+         }
+         case ENC_TYPE_AUTO: {
+             type = "WPA / WPA2 / PSK";
+             break;
+         }
+         case ENC_TYPE_NONE: {
+             type = "<<OPEN>>";
+             break;
+         }
+         default: {
+             type = "<<Unknown>>";
+             break;
+         }
+    }
+    return type;
+}
 void WM::begin_server(){
      server.begin();
 }
@@ -37,9 +67,11 @@ void WM::create_server() {
         else if (n) {
             for (int i = 0; i < n; ++i) {
                 String router = WiFi.SSID(i);
+                String encryptionType = encType(i);
                 Serial.println(router);
-                network_html += "<input type=\"radio\" id=\"#radiobuttonex\" name=\"ssid\" value=" + router + " required ><label for=\"html\">" + router + "</label><<br>";
+                network_html += "<input type=\"radio\" id=\"#radiobuttonex\" name=\"ssid\" value=" + router + " required ><label for=\"html\">" + router + "(" + encryptionType + "; " + (WiFi.isHidden(i) ? "Hidden" : "Discoverable") + ")</label><<br>";
             }
+            delay(500);
             WiFi.scanDelete();
             if (WiFi.scanComplete() == -2)
                 WiFi.scanNetworks(true);
