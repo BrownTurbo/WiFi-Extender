@@ -18,7 +18,11 @@
 #define WIFI_AUTORECONNECT true
 #define WIFI_RECONNECT_TIMER 500
 #define WIFI_STA_HOSTNAME "Beast's AP"
+#define WiFi_CONNECTION_WAIT 10000
+#define WiFi_CONNECTION_DELAY 1500
+
 #define STATIC_DHCP_AP false
+#define STATIC_DNS Google
 
 #define BUZZER_PIN 13 //GPIO 13 = D7
 #define BUZZER_ENABLED true
