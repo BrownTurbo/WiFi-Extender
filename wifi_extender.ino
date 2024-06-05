@@ -1,6 +1,7 @@
 /* 
  *  Author: Pius Onyema Ndukwu
- *  License: MIT License
+ *  Improved by Zorono
+ *  License: AGPL 3.0
  *  GitHub:https://github.com/Pius171/esp8266-wifi-extender
  *  
  */
@@ -19,6 +20,7 @@ long delay_time=0; // interval between blinks
 int connectedStations = 0;
 
 unsigned long lastConnectTry = 0;
+unsigned long lastNetCheck = 0;
 #if DEBUG_PROC
 uint8_t lastStatus = NULL;
 #endif
@@ -108,7 +110,7 @@ void clientStatus() {
 
     while (stat_info != NULL) {
         clientID++;
-        Serial.printf("\nINFO: (client = %d)IP Address = %s with MAC Address is = ", clientID, IPAddress((&stat_info->ip)->addr).toString().c_str());
+        Serial.printf("\nINFO: (client ID = %d)IP Address = %s with MAC Address is = ", clientID, IPAddress((&stat_info->ip)->addr).toString().c_str());
         for (int i = 0; i < 6; ++i) {
             Serial.printf("%02X", stat_info->bssid[i]);
             if (i < 5)
@@ -219,6 +221,15 @@ void PrintMacAddresses() {
         #endif
 }
 
+bool CheckAvailability(const String url);
+bool CheckAvailability(const String url) {
+  WiFiClient client;
+  if (!client.connect(url, 80))
+      return false;
+  client.stop();
+  return true;
+}
+
 void setup() {
     #if STARTUP_DELAY >= 500
     delay(STARTUP_DELAY);
@@ -276,7 +287,7 @@ void setup() {
         Serial.print("\nNOTICE: temporary reversing configurations to defaults...");
         StartWebserver();
         PrintMacAddresses();
-        delay_time=3000; // blink every half second
+        delay_time=750;
   }
   else
   {
@@ -297,6 +308,22 @@ void setup() {
       Serial.printf("\nDEBUG: Station SSID: %s", WiFi.SSID().c_str());
     #endif
     WaitWiFiConnection();
+
+    #if STATIC_DNS == Google
+        IPAddress _DNS1(8,8,8,8);
+        IPAddress _DNS2(8,8,4,4);
+    #elif STATIC_DNS == Cloudflare-Filter
+        IPAddress _DNS1(1,1,1,2);
+        IPAddress _DNS2(1,0,0,2);
+    #elif STATIC_DNS == Cloudflare-FilterAdult
+        IPAddress _DNS1(1,1,1,3);
+        IPAddress _DNS2(1,0,0,3);
+    #elif STATIC_DNS == Cloudflare
+        IPAddress _DNS1(1,1,1,1);
+        IPAddress _DNS2(1,0,0,1);
+    #else
+        //
+    #endif
 
     #if LWIP_DHCP_AP
     // give DNS servers to AP side
@@ -385,6 +412,24 @@ void loop() {
             Serial.printf(" \nTotal connected clients are %d ", clientCount);
             clientStatus();
         }
+        if (millis() > (lastNetCheck + WiFi_CONNECTION_WAIT)) {
+            #if DEBUG_PROC
+            Serial.print("\nDEBUG: Checking for Internet Connection...");
+            #endif
+            if (CheckAvailability("google.com")) {
+                lastNetCheck = millis();
+                #if DEBUG_PROC
+                Serial.print(" OK");
+                #endif
+            }
+            else {
+                #if BUZZER_ENABLED
+                TriggerBuzzer(1000, false, 5);
+                #endif
+                Serial.print("\nERROR: Failed to check for Internet connection.");
+                lastNetCheck = (millis() - (WiFi_CONNECTION_WAIT + WiFi_CONNECTION_DELAY));
+             }
+        }
     }
     #if WIFI_AUTORECONNECT
     else {
@@ -392,7 +437,7 @@ void loop() {
         TriggerBuzzer(1000, false, 3);
         #endif
         if (WiFi.status() != WL_IDLE_STATUS) {
-            if (millis() > (lastConnectTry + 3000)) {
+            if (millis() > (lastConnectTry + 1500)) {
                 Serial.println("Reconnecting to WiFi...");
                 WiFi.reconnect();
                 lastConnectTry = millis();
