@@ -312,17 +312,30 @@ void setup() {
     #if STATIC_DNS == Google
         IPAddress _DNS1(8,8,8,8);
         IPAddress _DNS2(8,8,4,4);
+        #if DEBUG_PROC
+        Serial.printf("\nDEBUG: Setting DNS Configuration to 'Google'");
+        #endif
     #elif STATIC_DNS == Cloudflare-Filter
         IPAddress _DNS1(1,1,1,2);
         IPAddress _DNS2(1,0,0,2);
+        #if DEBUG_PROC
+        Serial.printf("\nDEBUG: Setting DNS Configuration to 'Cloudflare with filters'");
+        #endif
     #elif STATIC_DNS == Cloudflare-FilterAdult
         IPAddress _DNS1(1,1,1,3);
         IPAddress _DNS2(1,0,0,3);
+        #if DEBUG_PROC
+        Serial.printf("\nDEBUG: Setting DNS Configuration to 'Cloudflare with extra filters'");
+        #endif
     #elif STATIC_DNS == Cloudflare
         IPAddress _DNS1(1,1,1,1);
         IPAddress _DNS2(1,0,0,1);
+        #if DEBUG_PROC
+        Serial.printf("\nDEBUG: Setting DNS Configuration to 'Cloudflare'");
+        #endif
     #else
         //
+        
     #endif
 
     #if LWIP_DHCP_AP
@@ -330,6 +343,13 @@ void setup() {
     dhcpSoftAP.dhcps_set_dns(0, WiFi.dnsIP(0));
     dhcpSoftAP.dhcps_set_dns(1, WiFi.dnsIP(1));
     #else
+    /*
+    dhcps_lease_t lease;
+    lease.enable = true;
+    lease.start_ip.addr = static_cast<uint32_t>(local_ip) + (1 << 24);
+    lease.end_ip.addr = static_cast<uint32_t>(local_ip) + (n << 24);
+    */
+        
     dhcps_set_dns(0, WiFi.dnsIP(0));
     dhcps_set_dns(1, WiFi.dnsIP(1));
     #endif
@@ -396,7 +416,7 @@ void setup() {
 }
         
 #endif
-            
+
 void loop() {
     #if DEBUG_PROC
     if (lastStatus != WiFi.status() && lastStatus != NULL) {
