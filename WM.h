@@ -27,5 +27,6 @@ class WM {
 };
 
 String encType(int id);
+int dBmtoPercentage(int dBm);
 
 #endif
