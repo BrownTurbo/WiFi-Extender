@@ -18,21 +18,33 @@ String encType(int id){
          case ENC_TYPE_CCMP: {
              type = "WPA2 / PSK";
              break;
-         }
-         case ENC_TYPE_AUTO: {
-             type = "WPA / WPA2 / PSK";
-             break;
-         }
-         case ENC_TYPE_NONE: {
-             type = "<<OPEN>>";
-             break;
-         }
-         default: {
-             type = "<<Unknown>>";
-             break;
-         }
+          }
+          case ENC_TYPE_AUTO: {
+              type = "WPA / WPA2 / PSK";
+              break;
+           }
+           case ENC_TYPE_NONE: {
+               type = "<<OPEN>>";
+               break;
+            }
+            default: {
+                type = "<<Unknown>>";
+                break;
+            }
     }
     return type;
+}
+int dBmtoPercentage( int dBm)
+{
+  int quality;
+    if(dBm <= RSSI_MIN)
+        quality = 0;
+    else if(dBm >= RSSI_MAX)
+        quality = 100;
+    else
+        quality = 2 * (dBm + 100);
+
+     return quality;
 }
 void WM::begin_server(){
      server.begin();
@@ -67,9 +79,9 @@ void WM::create_server() {
         else if (n) {
             for (int i = 0; i < n; ++i) {
                 String router = WiFi.SSID(i);
-                String encryptionType = encType(i);
+                int strength = WiFi.RSSI(i);
                 Serial.println(router);
-                network_html += "<input type=\"radio\" id=\"#radiobuttonex\" name=\"ssid\" value=" + router + " required ><label for=\"html\">" + router + "(" + encryptionType + "; " + (WiFi.isHidden(i) ? "Hidden" : "Discoverable") + ")</label><<br>";
+                network_html += "<input type=\"radio\" id=\"#radiobuttonex\" name=\"ssid\" value=" + router + " required ><label for=\"html\">" + router + "(" + encType(i) + "; " + (WiFi.isHidden(i) ? "Hidden" : "Discoverable") + "; " + strength + "dBm = %" + dBmtoPercentage(strength) + "; Channel=" + WiFi.channel(i) + ")</label><<br>";
             }
             delay(500);
             WiFi.scanDelete();
