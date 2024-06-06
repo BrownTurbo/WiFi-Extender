@@ -35,4 +35,7 @@
 #define NAPT 1000
 #define NAPT_PORT 10
 
+const int RSSI_MAX =-50;// define maximum strength of signal in dBm
+const int RSSI_MIN =-100;// define minimum strength of signal in dBm
+
 #endif
