@@ -55,7 +55,7 @@ void dump(int netif_idx, const char* data, size_t len, int out, int success) {
 
 #endif
 
-WM my_wifi;
+WM WiFiM;
 
 void InitSerial();
 void InitSerial() {
@@ -131,8 +131,8 @@ void StartWebserver() {
         IPAddress AccessPointIP = WiFi.softAPIP();
         Serial.printf("\nDEBUG: AP IP address: %s", AccessPointIP.toString().c_str());
         #endif
-        my_wifi.create_server();
-        my_wifi.begin_server();
+        WiFiM.create_server();
+        WiFiM.begin_server();
         #if DEBUG_PROC
         Serial.printf("\nDEBUG: HTTP server started on port %d", WEBsrv_PORT);
         #endif
@@ -151,38 +151,38 @@ bool WaitWiFiConnection() {
                   timeout_counter = WAIT_TIMEOUT;
                   break;
              }*/
-            case WL_NO_SSID_AVAIL: {
+             case WL_NO_SSID_AVAIL: {
                  Serial.print("\nERROR: SSID can't be reached!");
                  timeout_counter = WAIT_TIMEOUT;
                 #if BUZZER_ENABLED
                 TriggerBuzzer(1000, false, 5);
                 #endif
                  break;
-            }
-            case WL_CONNECT_FAILED: {
+             }
+             case WL_CONNECT_FAILED: {
                  Serial.print("\nERROR: Failed to connect to WiFi!");
                  timeout_counter = WAIT_TIMEOUT;
                  #if BUZZER_ENABLED
                  TriggerBuzzer(1000, false, 5);
                  #endif
                  break;
-            }
-            case WL_CONNECTION_LOST: {
+             }
+             case WL_CONNECTION_LOST: {
                  Serial.print("\nERROR: Lost Connection to WiFi!");
                  timeout_counter = WAIT_TIMEOUT;
                  #if BUZZER_ENABLED
                  TriggerBuzzer(1000, false, 5);
                  #endif
                  break;
-            }
-            case -1: {
+             }
+             case -1: {
                  Serial.print("\nERROR: Timeout on connecting to WiFi!");
                  timeout_counter = WAIT_TIMEOUT;
                  #if BUZZER_ENABLED
                  TriggerBuzzer(1000, false, 5);
                  #endif
                  break;
-             }
+              }
           }
           if(timeout_counter>=WAIT_TIMEOUT) {
               Serial.print("\nERROR: Timeout on connecting to WiFi!");
@@ -230,6 +230,17 @@ bool CheckAvailability(const String url) {
   return true;
 }
 
+void parseBytes(const char* str, char sep, byte* bytes, int maxBytes, int base);
+void parseBytes(const char* str, char sep, byte* bytes, int maxBytes, int base) {
+    for (int i = 0; i < maxBytes; i++) {
+        bytes[i] = strtoul(str, NULL, base);
+        str = strchr(str, sep);
+        if (str == NULL || *str == '\0')
+            break;                            
+        str++;
+    }
+}
+
 void setup() {
     #if STARTUP_DELAY >= 500
     delay(STARTUP_DELAY);
@@ -272,9 +283,9 @@ void setup() {
     phy_capture = dump;
 #endif
     
-   String ssid = my_wifi.get_credentials(0);
-   String pass =my_wifi.get_credentials(1);
-   String ap = my_wifi.get_credentials(2);
+   String ssid = WiFiM.get_credentials(0);
+   String pass =WiFiM.get_credentials(1);
+   String ap = WiFiM.get_credentials(2);
 
     if (ssid == "undefined") {
         // if the file does not exist, ssid will be undefined
@@ -306,8 +317,8 @@ void setup() {
       Serial.printf("\nDEBUG: Gataway IP Address: %s", IPAddress(WiFi.gatewayIP()).toString().c_str());
       Serial.printf("\nDEBUG: Station RSSI: %d dBm", WiFi.RSSI());
       Serial.printf("\nDEBUG: Station SSID: %s", WiFi.SSID().c_str());
-    #endif
-    WaitWiFiConnection();
+      #endif
+      WaitWiFiConnection();
 
     #if STATIC_DNS == Google
         IPAddress _DNS1(8,8,8,8);
@@ -361,9 +372,13 @@ void setup() {
                   WiFi.dnsIP(1).toString().c_str());
                 
     #if STATIC_DHCP_AP
-    IPAddress __localIP(192,168,4,2); // 172, 217, 28, 254
-    IPAddress __Gateway(192,168,4,1); // 172, 217, 28, 254
-    IPAddress __Subnet(255,255,255,0);
+    byte ip[4];
+    parseBytes(localIPAddr.c_str(),'.', ip, 4, 10);
+    IPAddress __localIP((uint8_t)ip[0], (uint8_t)ip[1], (uint8_t)ip[2], (uint8_t)ip[3]);
+    parseBytes(GatewayAddr.c_str(),'.', ip, 4, 10);
+    IPAddress __Gateway((uint8_t)ip[0], (uint8_t)ip[1], (uint8_t)ip[2], (uint8_t)ip[3]);
+    parseBytes(SubnetAddr.c_str(),'.', ip, 4, 10);
+    IPAddress __Subnet((uint8_t)ip[0], (uint8_t)ip[1], (uint8_t)ip[2], (uint8_t)ip[3]);
 
     Serial.printf("\nINFO: Setting Access point DHCP configuration ... %s", (WiFi.softAPConfig(__localIP, __Gateway, __Subnet) ? "Ready" : "Failed"));
     #endif
@@ -412,7 +427,7 @@ void setup() {
     
     Serial.printf("\n\nNAPT not supported in this configuration\n");
     RepeaterIsWorking= false;
-    digitalWrite(LED_BUILTIN, HIGH); // led stays off
+    digitalWrite(LED_BUILTIN, HIGH);
 }
         
 #endif
@@ -457,7 +472,7 @@ void loop() {
         TriggerBuzzer(1000, false, 3);
         #endif
         if (WiFi.status() != WL_IDLE_STATUS) {
-            if (millis() > (lastConnectTry + 1500)) {
+            if (millis() > (lastConnectTry + WIFI_RECONNECT_WAIT)) {
                 Serial.println("Reconnecting to WiFi...");
                 WiFi.reconnect();
                 lastConnectTry = millis();
