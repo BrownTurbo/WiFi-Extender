@@ -20,9 +20,16 @@
 #define WIFI_STA_HOSTNAME "Beast's AP"
 #define WiFi_CONNECTION_WAIT 10000
 #define WiFi_CONNECTION_DELAY 1500
+#define WIFI_RECONNECT_WAIT 1500
 
 #define STATIC_DHCP_AP false
 #define STATIC_DNS Google
+
+#if STATIC_DHCP_AP
+const String localIPAddr = "192.168.1.50"; //172, 217, 28, 254
+const String GatewayAddr = "192.168.1.1"; // 172, 217, 28, 254
+const String SubnetAddr = "255.255.255.0";
+#endif
 
 #define BUZZER_PIN 13 //GPIO 13 = D7
 #define BUZZER_ENABLED true
