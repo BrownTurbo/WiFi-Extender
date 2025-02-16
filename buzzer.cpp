@@ -26,7 +26,7 @@ void TriggerBuzzer() {
   Serial.println("\nDEBUG: Buzzer is triggered!");
   #endif
 
-  if (millis() - buzzerStart >= buzzerDelay) {
+  while (millis() - buzzerStart >= buzzerDelay) {
     buzzerState = !buzzerState;
     digitalWrite(BUZZER_PIN, buzzerState ? HIGH : LOW);
     buzzerStart = millis();
@@ -37,6 +37,7 @@ void TriggerBuzzer() {
 
       if(buzzerCount > 0 && buzzerMaxCount >= buzzerCount)
         buzzerActive = false;
+        break;
     }
   }
 }
