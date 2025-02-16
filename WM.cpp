@@ -100,13 +100,13 @@ void WM::create_server() {
                 network_html += "; Channel=";
                 network_html += String(WiFi.channel(i));
                 network_html += ")</label><br>";
-            }
+            }           
             SafeDelay(500);
-            WiFi.scanDelete();
-            if (WiFi.scanComplete() == -2) {
+            /*if (WiFi.scanComplete() == -2) {
                 Serial.println("\nSomething went Wrong when trying to scan WiFi Networks!");
                 network_html = "Something went Wrong!";
-            }
+            }*/
+            WiFi.scanDelete();
         }
         #if DEBUG_PROC
         Serial.printf("\nFree heap: %d\n", ESP.getFreeHeap());
