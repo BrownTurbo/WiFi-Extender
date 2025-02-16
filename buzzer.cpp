@@ -8,7 +8,7 @@ int buzzerDelay = 100;
 signed int buzzerMaxCount = 3;
 
 void InitBuzzer(int _delayMs, bool _infinite = false, int _count = 3) {
-  if (!buzzerActive)
+  if (buzzerActive)
     return;
   buzzerDelay = _delayMs;
   buzzerMaxCount = (_infinite ? -999 : _count);
