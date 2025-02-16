@@ -69,7 +69,7 @@ void WM::listDir(const char * dirname) {
 void WM::create_server() {
       server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
         #if DEBUG_PROC
-        Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
+        Serial.printf("\nFree heap: %d\n", ESP.getFreeHeap());
         #endif
         // scan for networks and get ssid
         String network_html = "";
@@ -80,7 +80,7 @@ void WM::create_server() {
         if (n == -2)
             WiFi.scanNetworks(true);
         else if (n > 0) {
-            network_html.reserve(1024);
+            network_html.reserve(3000);
             for (int i = 0; i < n; ++i) {
                 String router = WiFi.SSID(i);
                 int strength = WiFi.RSSI(i);
@@ -103,19 +103,22 @@ void WM::create_server() {
             }
             SafeDelay(500);
             WiFi.scanDelete();
-            if (WiFi.scanComplete() == -2)
-                WiFi.scanNetworks(true);
+            if (WiFi.scanComplete() == -2) {
+                Serial.println("\nSomething went Wrong when trying to scan WiFi Networks!");
+                network_html = "Something went Wrong!";
+            }
         }
         #if DEBUG_PROC
-        Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
+        Serial.printf("\nFree heap: %d\n", ESP.getFreeHeap());
         #endif
 
         String html = "<!DOCTYPE html><html>";
-        html+= "<head>";
-        html+=" <link rel=\"stylesheet\" href=\"styles.css\">";
-        html+= "</head>";
+        html.reserve(3300);
+        html += "<head>";
+        html +=" <link rel=\"stylesheet\" href=\"styles.css\">";
+        html += "</head>";
         html += "<body>";
-        html+= "<div>";
+        html += "<div>";
         html += "<h1>WiFi Extender Config page</h1>";
         html += "<button onclick=\"window.location.href='/';\">Scan </button>";
         html += "<p>networks found </p>";
@@ -125,7 +128,7 @@ void WM::create_server() {
         html += "<input type=\"text\" id=\"ap\" name=\"ap\" value=\"\" required ><label for=\"ap\">A.P name:</label><br>";
         html += "<input type=\"submit\" value=\"Submit\">";
         html += "</form></body></html>";
-        html+= "</div>";
+        html += "</div>";
 
         request->send(200, "text/html", html);
       });

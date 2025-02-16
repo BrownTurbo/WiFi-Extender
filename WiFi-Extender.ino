@@ -141,7 +141,7 @@ void StartWebserver();
 void StartWebserver() {
         if (wServerStarted) {
           #if DEBUG_PROC
-          Serial.println("Web Server is already running.");
+          Serial.println("\nWeb Server is already running.");
           #endif
           return;
         }
@@ -150,7 +150,7 @@ void StartWebserver() {
         if(client.connect(WiFi.localIP(), WEBsrv_PORT)) {
           client.stop();
           #if DEBUG_PROC
-          Serial.println("Web Server is already listening on port.");
+          Serial.println("\nWeb Server is already listening on port.");
           #endif
           wServerStarted = true;
           return;
@@ -162,12 +162,12 @@ void StartWebserver() {
         IPAddress AccessPointIP = WiFi.softAPIP();
         Serial.printf("\nDEBUG: AP IP address: %s", AccessPointIP.toString().c_str());
         
-        Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
+        Serial.printf("\nFree heap: %d\n", ESP.getFreeHeap());
         #endif
         WiFiM.create_server();
         WiFiM.begin_server();
         #if DEBUG_PROC
-        Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
+        Serial.printf("\nFree heap: %d\n", ESP.getFreeHeap());
         
         Serial.printf("\nDEBUG: HTTP server started on port %d", WEBsrv_PORT);
         #endif
