@@ -10,6 +10,7 @@
 #include <LittleFS.h>
 
 #include "config.h"
+#include "utils.h"
 
 #if (ARDDUINO >=100)
   #include "Arduino.h"

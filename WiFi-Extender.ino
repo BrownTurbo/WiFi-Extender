@@ -8,11 +8,13 @@
 
 #include "WM.h"
 #include "config.h"
+#include "utils.h"
+
 // variables
 bool RepeaterIsWorking= true;
 int ledState = LOW; 
 unsigned long previousMillis = 0;
-long delay_time=0; // interval between blinks
+unsigned long delay_time=0; // interval between blinks
 // blink every 200ms if connected to router
 // blink every 1sec if web server is active
 // led is off is there is an error with the repeater
@@ -22,21 +24,15 @@ int connectedStations = 0;
 unsigned long lastConnectTry = 0;
 unsigned long lastNetCheck = 0;
 #if DEBUG_PROC
-uint8_t lastStatus = NULL;
+uint8_t lastStatus = 0;
 #endif
 
-/* Set these to your desired credentials. */
+#include <ESP8266WiFi.h>
 
 #if LWIP_FEATURES && !LWIP_IPV6
 
 #include <lwip/napt.h>
 #include <lwip/dns.h>
-
-#if LWIP_DHCP_AP
-#include <LwipDhcpServer.h>
-#else
-#include <dhcpserver.h>
-#endif
 
 #if HAVE_NETDUMP
 
@@ -77,28 +73,44 @@ void InitSerial() {
         // After this, any writing to Serial will print gibberish on the serial monitor if the baudrate doesn't match
         Serial.begin(detectedBaudrate);
         #if DEBUG_PROC
-        Serial.printf("\nDEBUG: Serial is %d bps", detectedBaudrate);
+        Serial.printf("\nDEBUG: Serial is %lu bps", detectedBaudrate);
         #endif
     }
     Serial.setDebugOutput(DEBUG_PROC);
+
+    Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
 }
 
+
+enum EventType {
+  EVENT_NO_SSID,
+  EVENT_CONNECT_FAILED,
+  EVENT_CONNECTION_LOST,
+  EVENT_TIMEOUT,
+  EVENT_DEFAULT
+};
 #if BUZZER_ENABLED
-void TriggerBuzzer(int _delay, bool _infinite, int _count);
-void TriggerBuzzer(int _delay, bool _infinite = false, int _count = 3) {
-    #if DEBUG_PROC
-    Serial.println("\nDEBUG: Buzzer is triggered!");
-    #endif
-    int __count = 0;
-    while (true) {
-        digitalWrite(BUZZER_PIN, HIGH);
-        delay(_delay);
-        digitalWrite(BUZZER_PIN, LOW);
-        delay(_delay);
-        __count += 1;
-        if(!_infinite && _count > 0 && __count >= _count)
-            break;
-    }
+#include "buzzer.h"
+void triggerBuzzerForEvent(EventType event);
+void triggerBuzzerForEvent(EventType event = EVENT_DEFAULT) {
+  switch(event) {
+    case EVENT_NO_SSID:
+      InitBuzzer(1000, false, 5);
+      break;
+    case EVENT_CONNECT_FAILED:
+      InitBuzzer(500, false, 3);
+      break;
+    case EVENT_CONNECTION_LOST:
+      InitBuzzer(750, false, 4);
+      break;
+    case EVENT_TIMEOUT:
+      InitBuzzer(2000, false, 5);
+      break;
+    default:
+      InitBuzzer(1000, false, 6);
+      break;
+  }
+  TriggerBuzzer();
 }
 #endif
 
@@ -121,22 +133,47 @@ void clientStatus() {
         Serial.println();
     }
     wifi_softap_free_station_info();
-    delay(500);
+    SafeDelay(500);
 }
 
+bool wServerStarted = false;
 void StartWebserver();
 void StartWebserver() {
-        WiFi.softAP(DefaultWiFi);
+        if (wServerStarted) {
+          #if DEBUG_PROC
+          Serial.println("Web Server is already running.");
+          #endif
+          return;
+        }
+        WiFiClient client;
+        client.setTimeout(2000);
+        if(client.connect(WiFi.localIP(), WEBsrv_PORT)) {
+          client.stop();
+          #if DEBUG_PROC
+          Serial.println("Web Server is already listening on port.");
+          #endif
+          wServerStarted = true;
+          return;
+        }
+        if(WiFi.getMode() != WIFI_AP || WiFi.softAPIP() == IPAddress(0,0,0,0)) {
+          WiFi.softAP(DefaultWiFi);
+        }
         #if DEBUG_PROC
         IPAddress AccessPointIP = WiFi.softAPIP();
         Serial.printf("\nDEBUG: AP IP address: %s", AccessPointIP.toString().c_str());
+        
+        Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
         #endif
         WiFiM.create_server();
         WiFiM.begin_server();
         #if DEBUG_PROC
+        Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
+        
         Serial.printf("\nDEBUG: HTTP server started on port %d", WEBsrv_PORT);
         #endif
         //delay_time = 1000; // blink every sec if webserver is active
+
+        wServerStarted = true;
 }
 
 bool WaitWiFiConnection();
@@ -155,7 +192,8 @@ bool WaitWiFiConnection() {
                  Serial.print("\nERROR: SSID can't be reached!");
                  timeout_counter = WAIT_TIMEOUT;
                 #if BUZZER_ENABLED
-                TriggerBuzzer(1000, false, 5);
+                InitBuzzer(1000, false, 5);
+                TriggerBuzzer();
                 #endif
                  break;
              }
@@ -163,7 +201,8 @@ bool WaitWiFiConnection() {
                  Serial.print("\nERROR: Failed to connect to WiFi!");
                  timeout_counter = WAIT_TIMEOUT;
                  #if BUZZER_ENABLED
-                 TriggerBuzzer(1000, false, 5);
+                 InitBuzzer(1000, false, 5);
+                 TriggerBuzzer();
                  #endif
                  break;
              }
@@ -171,7 +210,8 @@ bool WaitWiFiConnection() {
                  Serial.print("\nERROR: Lost Connection to WiFi!");
                  timeout_counter = WAIT_TIMEOUT;
                  #if BUZZER_ENABLED
-                 TriggerBuzzer(1000, false, 5);
+                 InitBuzzer(1000, false, 5);
+                 TriggerBuzzer();
                  #endif
                  break;
              }
@@ -179,15 +219,26 @@ bool WaitWiFiConnection() {
                  Serial.print("\nERROR: Timeout on connecting to WiFi!");
                  timeout_counter = WAIT_TIMEOUT;
                  #if BUZZER_ENABLED
-                 TriggerBuzzer(1000, false, 5);
+                 InitBuzzer(1000, false, 5);
+                 TriggerBuzzer();
+                 #endif
+                 break;
+              }
+              default: {
+                 Serial.print("\nERROR: Something went wrong!");
+                 timeout_counter = WAIT_TIMEOUT;
+                 #if BUZZER_ENABLED
+                 InitBuzzer(1000, false, 6);
+                 TriggerBuzzer();
                  #endif
                  break;
               }
           }
           if(timeout_counter>=WAIT_TIMEOUT) {
-              Serial.print("\nERROR: Timeout on connecting to WiFi!");
+              Serial.print("\nERROR: Timeout on connecting to WiFi! Starting fallback web server.");
               #if BUZZER_ENABLED
-              TriggerBuzzer(2000, false, 5);
+              InitBuzzer(2000, false, 5);
+              TriggerBuzzer();
               #endif
               StartWebserver();
           }
@@ -195,7 +246,7 @@ bool WaitWiFiConnection() {
           Serial.print('.');
           timeout_counter++;
           digitalWrite(LED_BUILTIN, LOW);
-          delay(WIFI_RECONNECT_TIMER);
+          SafeDelay(WIFI_RECONNECT_TIMER);
     }
     return (WiFi.isConnected());
 }
@@ -243,7 +294,7 @@ void parseBytes(const char* str, char sep, byte* bytes, int maxBytes, int base) 
 
 void setup() {
     #if STARTUP_DELAY >= 500
-    delay(STARTUP_DELAY);
+    SafeDelay(STARTUP_DELAY);
     #endif
     pinMode(0,INPUT_PULLUP);
     pinMode(LED_BUILTIN,OUTPUT);
@@ -256,7 +307,8 @@ void setup() {
      if (WiFi.status() == WL_NO_SHIELD) {
         Serial.println("ERROR: WiFi shield not present");
         #if BUZZER_ENABLED
-        TriggerBuzzer(1000, false, 5);
+        InitBuzzer(1000, false, 5);
+        TriggerBuzzer();
         #endif
         delay_time = 4000;
         return;
@@ -268,7 +320,8 @@ void setup() {
     if (!LittleFS.begin()) {
         Serial.println("ERROR: LittleFS mount failed");
         #if BUZZER_ENABLED
-        TriggerBuzzer(1000, false, 5);
+        InitBuzzer(1000, false, 5);
+        TriggerBuzzer();
         #endif
         delay_time = 4000;
         return;
@@ -349,23 +402,20 @@ void setup() {
         
     #endif
 
-    #if LWIP_DHCP_AP
-    // give DNS servers to AP side
-    dhcpSoftAP.dhcps_set_dns(0, WiFi.dnsIP(0));
-    dhcpSoftAP.dhcps_set_dns(1, WiFi.dnsIP(1));
-    #else
     /*
     dhcps_lease_t lease;
     lease.enable = true;
     lease.start_ip.addr = static_cast<uint32_t>(local_ip) + (1 << 24);
     lease.end_ip.addr = static_cast<uint32_t>(local_ip) + (n << 24);
     */
-        
-    dhcps_set_dns(0, WiFi.dnsIP(0));
-    dhcps_set_dns(1, WiFi.dnsIP(1));
-    #endif
-    // auto& _DHCPserver = WiFi.softAPDhcpServer();
-     //_DHCPserver.setDns(WiFi.dnsIP(0), WiFi.dnsIP(1));
+    auto& _DHCPserver = WiFi.softAPDhcpServer();
+    ip_addr_t primaryDNS, secondaryDNS;
+    primaryDNS = WiFi.dnsIP(0);
+    secondaryDNS = WiFi.dnsIP(1);
+     _DHCPserver.setDns(primaryDNS);
+     dns_setserver(0, &primaryDNS);
+     _DHCPserver.setDns(secondaryDNS);
+     dns_setserver(1, &secondaryDNS);
 
     Serial.printf("\nStation DNS: %s & %s",
                   WiFi.dnsIP(0).toString().c_str(),
@@ -399,14 +449,16 @@ void setup() {
         if (ret == ERR_OK) {
               Serial.printf("\nINFO: Successfully NATed to WiFi Network '%s' with the same password", ssid.c_str());
               #if BUZZER_ENABLED
-              TriggerBuzzer(1000,false, 2);
+              InitBuzzer(1000,false, 2);
+              TriggerBuzzer();
               #endif
          }
     }
     else {
         Serial.print("\nERROR: NAPT initialization failed");
         #if BUZZER_ENABLED
-        TriggerBuzzer(1000, false, 5);
+        InitBuzzer(1000, false, 5);
+        TriggerBuzzer();
         #endif
         delay_time = 2500;
         RepeaterIsWorking = true;
@@ -423,6 +475,7 @@ void setup() {
 #else
 
 void setup() {
+    ESP.wdtFeed();
      InitSerial();
     
     Serial.printf("\n\nNAPT not supported in this configuration\n");
@@ -434,7 +487,7 @@ void setup() {
 
 void loop() {
     #if DEBUG_PROC
-    if (lastStatus != WiFi.status() && lastStatus != NULL) {
+    if (lastStatus != WiFi.status() && lastStatus != 0) {
         Serial.printf("\nDEBUG: OLD WiFi status: %d", lastStatus);
         lastStatus = WiFi.status();
         Serial.printf("\nDEBUG: NEW WiFi status: %d", lastStatus);
@@ -459,7 +512,8 @@ void loop() {
             }
             else {
                 #if BUZZER_ENABLED
-                TriggerBuzzer(1000, false, 5);
+                InitBuzzer(1000, false, 5);
+                TriggerBuzzer();
                 #endif
                 Serial.print("\nERROR: Failed to check for Internet connection.");
                 lastNetCheck = (millis() - (WiFi_CONNECTION_WAIT + WiFi_CONNECTION_DELAY));
@@ -469,7 +523,8 @@ void loop() {
     #if WIFI_AUTORECONNECT
     else {
         #if BUZZER_ENABLED
-        TriggerBuzzer(1000, false, 3);
+        InitBuzzer(1000, false, 3);
+        TriggerBuzzer();
         #endif
         if (WiFi.status() != WL_IDLE_STATUS) {
             if (millis() > (lastConnectTry + WIFI_RECONNECT_WAIT)) {

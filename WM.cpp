@@ -68,6 +68,9 @@ void WM::listDir(const char * dirname) {
 
 void WM::create_server() {
       server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
+        #if DEBUG_PROC
+        Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
+        #endif
         // scan for networks and get ssid
         String network_html = "";
 
@@ -76,18 +79,36 @@ void WM::create_server() {
         int n = WiFi.scanComplete();
         if (n == -2)
             WiFi.scanNetworks(true);
-        else if (n) {
+        else if (n > 0) {
+            network_html.reserve(1024);
             for (int i = 0; i < n; ++i) {
                 String router = WiFi.SSID(i);
                 int strength = WiFi.RSSI(i);
                 Serial.println(router);
-                network_html += "<input type=\"radio\" id=\"#radiobuttonex\" name=\"ssid\" value=" + router + " required ><label for=\"html\">" + router + "(" + encType(i) + "; " + (WiFi.isHidden(i) ? "Hidden" : "Discoverable") + "; " + strength + "dBm = %" + dBmtoPercentage(strength) + "; Channel=" + WiFi.channel(i) + ")</label><<br>";
+                network_html += "<input type=\"radio\" id=\"radiobuttonex\" name=\"ssid\" value=\"";
+                network_html += router;
+                network_html += "\" required ><label for=\"html\">";
+                network_html += router;
+                network_html += " (";
+                network_html += encType(i);
+                network_html += "; ";
+                network_html += (WiFi.isHidden(i) ? "Hidden" : "Discoverable");
+                network_html += "; ";
+                network_html += String(strength);
+                network_html += "dBm = %";
+                network_html += String(dBmtoPercentage(strength));
+                network_html += "; Channel=";
+                network_html += String(WiFi.channel(i));
+                network_html += ")</label><br>";
             }
-            delay(500);
+            SafeDelay(500);
             WiFi.scanDelete();
             if (WiFi.scanComplete() == -2)
                 WiFi.scanNetworks(true);
         }
+        #if DEBUG_PROC
+        Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
+        #endif
 
         String html = "<!DOCTYPE html><html>";
         html+= "<head>";
@@ -121,7 +142,7 @@ void WM::create_server() {
 "}";
         
        request->send(200, "text/css", style);
-        });
+      });
 
       // Send a GET request to <IP>/get?message=<message> 
       server.on("/credentials", HTTP_GET, [] (AsyncWebServerRequest * request) {
@@ -157,15 +178,16 @@ void WM::create_server() {
         String path = CONFIG_FILE;
 
         #if DEBUG_PROC
-        Serial.printf("DEBUG: Writing file: %s\n", path);
+        Serial.printf("DEBUG: Writing file: %s\n", path.c_str());
         #endif
 
-        File file = LittleFS.open(path, "w");
+        File file = LittleFS.open(path.c_str(), "w");
         if (!file) {
             #if DEBUG_PROC
             Serial.println("DEBUG: Failed to open file for writing");
+            request->send(500, "application/json", "{\"error\":\"Failed to open file for writing\"}");
             #endif
-            return "undefined";
+            return;
         }
         #if DEBUG_PROC
         if (file.print(output))
