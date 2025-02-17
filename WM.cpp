@@ -101,11 +101,11 @@ void WM::create_server() {
                 network_html += String(WiFi.channel(i));
                 network_html += ")</label><br>";
             }           
-            SafeDelay(500);
-            /*if (WiFi.scanComplete() == -2) {
+            delay(500);
+            if (WiFi.scanComplete() == -2) {
                 Serial.println("\nSomething went Wrong when trying to scan WiFi Networks!");
-                network_html = "Something went Wrong!";
-            }*/
+                request->send(500, "application/json", "{\"error\":\"Failed to scan for WiFi Networks\"}");
+            }
             WiFi.scanDelete();
         }
         #if DEBUG_PROC
@@ -113,7 +113,7 @@ void WM::create_server() {
         #endif
 
         String html = "<!DOCTYPE html><html>";
-        html.reserve(3300);
+        html.reserve(3350);
         html += "<head>";
         html +=" <link rel=\"stylesheet\" href=\"styles.css\">";
         html += "</head>";
@@ -202,6 +202,7 @@ void WM::create_server() {
         #endif
 
         file.close();
+        request->send(200, "text/plain", "Recieved.");
       });
 }
 

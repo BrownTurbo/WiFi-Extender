@@ -133,7 +133,7 @@ void clientStatus() {
         Serial.println();
     }
     wifi_softap_free_station_info();
-    SafeDelay(500);
+    delay(500);
 }
 
 bool wServerStarted = false;
@@ -246,7 +246,7 @@ bool WaitWiFiConnection() {
           Serial.print('.');
           timeout_counter++;
           digitalWrite(LED_BUILTIN, LOW);
-          SafeDelay(WIFI_RECONNECT_TIMER);
+          delay(WIFI_RECONNECT_TIMER);
     }
     return (WiFi.isConnected());
 }
@@ -294,7 +294,7 @@ void parseBytes(const char* str, char sep, byte* bytes, int maxBytes, int base) 
 
 void setup() {
     #if STARTUP_DELAY >= 500
-    SafeDelay(STARTUP_DELAY);
+    delay(STARTUP_DELAY);
     #endif
     pinMode(0,INPUT_PULLUP);
     pinMode(LED_BUILTIN,OUTPUT);
