@@ -9,6 +9,13 @@
 #include "WM.h"
 #include "config.h"
 #include "utils.h"
+#include <lwip/opt.h>
+#include <lwip/ip.h>
+#include <lwip/priv/tcp_priv.h>
+#include "lwip/etharp.h"
+#include <lwip/ip_addr.h>
+#include <lwip/netif.h>
+#include <map>
 
 // variables
 bool RepeaterIsWorking= true;
@@ -26,6 +33,14 @@ unsigned long lastNetCheck = 0;
 #if DEBUG_PROC
 uint8_t lastStatus = 0;
 #endif
+
+std::map<unsigned int, MacAddress> whitelistedClients;
+struct netif* ap_interface = nullptr;
+netif_input_fn original_ap_input = nullptr;
+std::vector<MacAddress> macWhitelist = {
+    {{0x1A, 0x2B, 0x3C, 0x4D, 0x5E, 0x6F}},
+    {{0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF}}
+};
 
 #include <ESP8266WiFi.h>
 
@@ -52,6 +67,7 @@ void dump(int netif_idx, const char* data, size_t len, int out, int success) {
 #endif
 
 WM WiFiM;
+LiquidCrystal_I2C lcd(0x27,16,2); 
 
 void InitSerial();
 void InitSerial() {
@@ -122,11 +138,27 @@ void clientStatus() {
 
     while (stat_info != NULL) {
         clientID++;
-        Serial.printf("\nINFO: (client ID = %d)IP Address = %s with MAC Address is = ", clientID, IPAddress((&stat_info->ip)->addr).toString().c_str());
-        for (int i = 0; i < 6; ++i) {
-            Serial.printf("%02X", stat_info->bssid[i]);
-            if (i < 5)
-                Serial.print(":");
+        Serial.printf("\nINFO: (client ID = %d)IP Address = %s with MAC Address %02X:%02X:%02X:%02X:%02X:%02X", clientID, IPAddress((&stat_info->ip)->addr).toString().c_str(), stat_info->bssid[0], stat_info->bssid[1], stat_info->bssid[2], stat_info->bssid[3], stat_info->bssid[4], stat_info->bssid[5]);
+
+        bool isAllowed = false;
+        // Compare current client's MAC (bssid) against the whitelist
+        for (const auto& trusted : macWhitelist) {
+            if (memcmp(stat_info->bssid, trusted.addr, 6) == 0) {
+                isAllowed = true;
+                MacAddress currentMac;
+                memcpy(currentMac.addr, stat_info->bssid, 6);
+                whitelistedClients[(&stat_info->ip)->addr] = currentMac;
+                break;
+            }
+        }
+
+        if (!isAllowed) {
+            Serial.printf("SECURITY: Detected unauthorized MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", stat_info->bssid[0], stat_info->bssid[1], stat_info->bssid[2], stat_info->bssid[3], stat_info->bssid[4], stat_info->bssid[5]);
+            scrollMessage(lcd, 0, 0, "Unauthorized Access to the AP...", 5, 500);
+            #if BUZZER_ENABLED
+            InitBuzzer(1000, false, 8);
+            TriggerBuzzer();
+            #endif
         }
 
         stat_info = STAILQ_NEXT(stat_info, next);
@@ -185,20 +217,23 @@ bool WaitWiFiConnection() {
           switch (ConnectionStatus) {
               /*case WL_CONNECT_WRONG_PASSWORD: {
                   Serial.print("\nERROR: Wrong WiFi Password!");
+                  scrollMessage(lcd, 0, 0, "Wrong WiFi Password...", 5, 500);
                   timeout_counter = WAIT_TIMEOUT;
                   break;
              }*/
              case WL_NO_SSID_AVAIL: {
                  Serial.print("\nERROR: SSID can't be reached!");
+                 scrollMessage(lcd, 0, 0, "Failed to reach SSD...", 5, 500);
                  timeout_counter = WAIT_TIMEOUT;
-                #if BUZZER_ENABLED
-                InitBuzzer(1000, false, 5);
-                TriggerBuzzer();
-                #endif
+                 #if BUZZER_ENABLED
+                 InitBuzzer(1000, false, 5);
+                 TriggerBuzzer();
+                 #endif
                  break;
              }
              case WL_CONNECT_FAILED: {
                  Serial.print("\nERROR: Failed to connect to WiFi!");
+                 scrollMessage(lcd, 0, 0, "Failed to connect to WiFi...", 5, 500);
                  timeout_counter = WAIT_TIMEOUT;
                  #if BUZZER_ENABLED
                  InitBuzzer(1000, false, 5);
@@ -208,6 +243,7 @@ bool WaitWiFiConnection() {
              }
              case WL_CONNECTION_LOST: {
                  Serial.print("\nERROR: Lost Connection to WiFi!");
+                 scrollMessage(lcd, 0, 0, "Lost connection to WiFi...", 5, 500);
                  timeout_counter = WAIT_TIMEOUT;
                  #if BUZZER_ENABLED
                  InitBuzzer(1000, false, 5);
@@ -217,6 +253,7 @@ bool WaitWiFiConnection() {
              }
              case -1: {
                  Serial.print("\nERROR: Timeout on connecting to WiFi!");
+                 scrollMessage(lcd, 0, 0, "Timeout on connecting to WiFi...", 5, 500);
                  timeout_counter = WAIT_TIMEOUT;
                  #if BUZZER_ENABLED
                  InitBuzzer(1000, false, 5);
@@ -224,8 +261,13 @@ bool WaitWiFiConnection() {
                  #endif
                  break;
               }
+              case 3: {
+                Serial.print("\nCONNECTED sucessfully to SSID...");
+                break;
+              }
               default: {
-                 Serial.print("\nERROR: Something went wrong!");
+                 Serial.printf("\nERROR: Something went wrong!\nConnectionStatus = %d", ConnectionStatus);
+                 scrollMessage(lcd, 0, 0, "Unknown Error..", 5, 500);
                  timeout_counter = WAIT_TIMEOUT;
                  #if BUZZER_ENABLED
                  InitBuzzer(1000, false, 6);
@@ -236,6 +278,7 @@ bool WaitWiFiConnection() {
           }
           if(timeout_counter>=WAIT_TIMEOUT) {
               Serial.print("\nERROR: Timeout on connecting to WiFi! Starting fallback web server.");
+              scrollMessage(lcd, 0, 0, "Timeout on connecting to WiFi...", 5, 500);
               #if BUZZER_ENABLED
               InitBuzzer(2000, false, 5);
               TriggerBuzzer();
@@ -292,6 +335,42 @@ void parseBytes(const char* str, char sep, byte* bytes, int maxBytes, int base) 
     }
 }
 
+err_t custom_ip_input_filter(struct pbuf *p, struct netif *inp) {
+    if (p == nullptr)
+        return ERR_OK;
+    struct ip_hdr *iphdr = (struct ip_hdr *)p->payload;
+    unsigned int src_ip = (&iphdr->src)->addr;
+
+    for (auto client : whitelistedClients) {
+        if (src_ip == client.first) {
+            #if DEBUG_PROC
+            Serial.printf("SECURITY: Dropping packet from %s (MAC Address = %02X:%02X:%02X:%02X:%02X:%02X)\n", IPAddress(src_ip).toString().c_str(), client.second.addr[0], client.second.addr[1], client.second.addr[2], client.second.addr[3], client.second.addr[4], client.second.addr[5]);
+            #endif
+            
+            if (inp != nullptr && inp->name[0] == 'a' && inp->name[1] == 'p') {
+                pbuf_free(p);
+                return ERR_OK;
+            }
+        }
+    }
+    return original_ap_input(p, inp);
+}
+
+void injectFirewall() {
+    for (ap_interface = netif_list; ap_interface != nullptr; ap_interface = ap_interface->next) {
+        if (ap_interface->name[0] == 'a' && ap_interface->name[1] == 'p') {
+            original_ap_input = ap_interface->input;
+            ap_interface->input = custom_ip_input_filter;
+            
+            #if DEBUG_PROC
+            Serial.println("DEBUG: SoftAP Interface Hijacked successfully!");
+            #endif
+            return;
+        }
+    }
+    Serial.println("ERROR: Could not find SoftAP interface to hijack.");
+}
+
 void setup() {
     #if STARTUP_DELAY >= 500
     delay(STARTUP_DELAY);
@@ -303,7 +382,19 @@ void setup() {
     #endif
     digitalWrite(LED_BUILTIN, HIGH);
     InitSerial();
+
+    Wire.begin(D2, D1);
     
+    lcd.init();
+    lcd.clear();
+    lcd.backlight();
+    
+    lcd.setCursor(2,0);
+    lcd.print("BrownTurbo");
+
+    lcd.setCursor(4, 1);
+    lcd.print("by Zorono");
+
      if (WiFi.status() == WL_NO_SHIELD) {
         Serial.println("ERROR: WiFi shield not present");
         #if BUZZER_ENABLED
@@ -401,6 +492,7 @@ void setup() {
         //
         
     #endif
+    scrollMessage(lcd, 0, 0, "configuring DNS...", 5, 500);
 
     /*
     dhcps_lease_t lease;
@@ -430,8 +522,10 @@ void setup() {
     parseBytes(SubnetAddr.c_str(),'.', ip, 4, 10);
     IPAddress __Subnet((uint8_t)ip[0], (uint8_t)ip[1], (uint8_t)ip[2], (uint8_t)ip[3]);
 
+    scrollMessage(lcd, 0, 0, "configuring AP DHCP", 1, 5, 500);
     Serial.printf("\nINFO: Setting Access point DHCP configuration ... %s", (WiFi.softAPConfig(__localIP, __Gateway, __Subnet) ? "Ready" : "Failed"));
     #endif
+    scrollMessage(lcd, 0, 0, "Setting Acess point...", 5, 500);
     Serial.printf("\nINFO: Setting Access point ... %s", (WiFi.softAP(ap, pass, WiFiChannel, WiFiHidden, MaxWiFiConnections) ? "Ready" : "Failed"));
         
     #if DEBUG_PROC
@@ -447,15 +541,17 @@ void setup() {
         Serial.printf("\nDEBUG: ip_napt_enable_no(SOFTAP_IF): ret=%d (OK=%d)", (int)ret, (int)ERR_OK);
         #endif
         if (ret == ERR_OK) {
+              scrollMessage(lcd, 0, 0, "NATed to WiFi Network...", 5, 500);
               Serial.printf("\nINFO: Successfully NATed to WiFi Network '%s' with the same password", ssid.c_str());
               #if BUZZER_ENABLED
               InitBuzzer(1000,false, 2);
               TriggerBuzzer();
               #endif
-         }
+        }
     }
     else {
         Serial.print("\nERROR: NAPT initialization failed");
+        scrollMessage(lcd, 0, 0, "NAPT Initialization failed...", 5, 500);
         #if BUZZER_ENABLED
         InitBuzzer(1000, false, 5);
         TriggerBuzzer();
@@ -464,6 +560,7 @@ void setup() {
         RepeaterIsWorking = true;
         return;
     }
+    injectFirewall();
     #if DEBUG_PROC
     Serial.printf("\nDEBUG: Heap after napt init: %d", ESP.getFreeHeap());
     #endif
@@ -476,7 +573,7 @@ void setup() {
 
 void setup() {
     ESP.wdtFeed();
-     InitSerial();
+    InitSerial();
     
     Serial.printf("\n\nNAPT not supported in this configuration\n");
     RepeaterIsWorking= false;
@@ -491,6 +588,10 @@ void loop() {
         Serial.printf("\nDEBUG: OLD WiFi status: %d", lastStatus);
         lastStatus = WiFi.status();
         Serial.printf("\nDEBUG: NEW WiFi status: %d", lastStatus);
+        if(lastStatus == 1)
+            scrollMessage(lcd, 0, 0, "WiFi Status is Connected", 5, 500);
+        else
+            scrollMessage(lcd, 0, 0, "WiFi Status is NOT Connected", 5, 500);
     }
     #endif
     if (WiFi.isConnected()) {
@@ -516,6 +617,9 @@ void loop() {
                 TriggerBuzzer();
                 #endif
                 Serial.print("\nERROR: Failed to check for Internet connection.");
+                lcd.clear();
+                lcd.setCursor(0,0);
+                lcd.print("No Internet...");
                 lastNetCheck = (millis() - (WiFi_CONNECTION_WAIT + WiFi_CONNECTION_DELAY));
              }
         }
@@ -529,6 +633,8 @@ void loop() {
         if (WiFi.status() != WL_IDLE_STATUS) {
             if (millis() > (lastConnectTry + WIFI_RECONNECT_WAIT)) {
                 Serial.println("Reconnecting to WiFi...");
+                lcd.clear();
+                scrollMessage(lcd, 0, 0, "Reconnecting to WiFi...", 5, 500);
                 WiFi.reconnect();
                 lastConnectTry = millis();
             }
@@ -559,4 +665,8 @@ void loop() {
       }
       break;
     }
+    char __txt[32];
+    String hostName = WiFi.hostname();
+    snprintf(__txt, sizeof(__txt), "Hostname: %s", hostName.c_str());
+    scrollMessage(lcd, 1, 2, __txt, 7, 500, false, hostName.c_str());
 }

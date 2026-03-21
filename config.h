@@ -1,5 +1,6 @@
 #ifndef CONFIG_H
 #define CONFIG_H
+#include <vector>
 
 #define DEBUG_PROC true
 
@@ -44,5 +45,11 @@ const String SubnetAddr = "255.255.255.0";
 
 const int RSSI_MAX =-50;// define maximum strength of signal in dBm
 const int RSSI_MIN =-100;// define minimum strength of signal in dBm
+
+struct MacAddress {
+    unsigned int addr[6];
+};
+
+extern std::vector<MacAddress> macWhitelist;
 
 #endif

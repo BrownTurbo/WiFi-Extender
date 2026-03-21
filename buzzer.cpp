@@ -36,8 +36,10 @@ void TriggerBuzzer() {
         buzzerCount++;
 
       if(buzzerCount > 0 && buzzerMaxCount >= buzzerCount)
+      {
         buzzerActive = false;
         break;
+      }
     }
   }
 }

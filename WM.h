@@ -8,13 +8,13 @@
 #include <ArduinoJson.h>
 #include <FS.h>
 #include <LittleFS.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
 
 #include "config.h"
 #include "utils.h"
 
-#if (ARDDUINO >=100)
-  #include "Arduino.h"
-#endif
+#include <Arduino.h>
 
 class WM {
   public:
