@@ -38,7 +38,16 @@ std::map<unsigned int, MacAddress> whitelistedClients;
 struct netif* ap_interface = nullptr;
 netif_input_fn original_ap_input = nullptr;
 std::vector<MacAddress> macWhitelist = {
-    //
+    {{0xB4, 0xB5, 0xB6, 0xF7, 0xC9, 0xCB}},
+    {{0x64, 0xD0, 0xD6, 0x3F, 0xFF, 0x54}},
+    {{0x28, 0xEE, 0x52, 0x1B, 0xD2, 0x70}},
+    {{0xE0, 0x1C, 0xFC, 0xAE, 0x3F, 0x82}},
+    {{0xD4, 0x67, 0xD3, 0xAB, 0x36, 0x43}},
+    {{0xDC, 0xA6, 0x32, 0xED, 0x88, 0xD4}},
+    {{0x28, 0x33, 0x34, 0x7E, 0xA3, 0x44}},
+    {{0x38, 0xBA, 0xF8, 0xE9, 0xBE, 0xE8}},
+    {{0xC4, 0x9F, 0x4C, 0x37, 0x15, 0xF9}},
+    {{0x64, 0xD0, 0xD6, 0x66, 0xD3, 0x02}}
 };
 
 #include <ESP8266WiFi.h>
@@ -355,7 +364,7 @@ err_t custom_ip_input_filter(struct pbuf *p, struct netif *inp) {
     auto it = whitelistedClients.find(src_ip);
     if (it == whitelistedClients.end()) {
         #if DEBUG_PROC
-        Serial.printf("SECURITY: Dropping packet from %s (MAC Address = %02X:%02X:%02X:%02X:%02X:%02X)\n", IPAddress(src_ip).toString().c_str(), src_mac[0], src_mac[1], src_mac[2], src_mac[3], src_mac[4], src_mac[5]);
+        Serial.printf("DEBUG: Dropping packet from %s (MAC Address = %02X:%02X:%02X:%02X:%02X:%02X)\n", IPAddress(src_ip).toString().c_str(), src_mac[0], src_mac[1], src_mac[2], src_mac[3], src_mac[4], src_mac[5]);
         #endif
         
         if (inp != nullptr && inp->name[0] == 'a' && inp->name[1] == 'p') {
