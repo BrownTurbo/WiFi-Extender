@@ -188,8 +188,8 @@ void WM::create_server() {
         if (!file) {
             #if DEBUG_PROC
             Serial.println("DEBUG: Failed to open file for writing");
-            request->send(500, "application/json", "{\"error\":\"Failed to open file for writing\"}");
             #endif
+            request->send(500, "application/json", "{\"error\":\"Failed to open file for writing\"}");
             return;
         }
         #if DEBUG_PROC
@@ -198,7 +198,7 @@ void WM::create_server() {
         else
             Serial.println("DEBUG: Write failed");
         #else
-            file.print(output);
+        file.print(output);
         #endif
 
         file.close();

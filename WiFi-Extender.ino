@@ -38,8 +38,7 @@ std::map<unsigned int, MacAddress> whitelistedClients;
 struct netif* ap_interface = nullptr;
 netif_input_fn original_ap_input = nullptr;
 std::vector<MacAddress> macWhitelist = {
-    {{0x1A, 0x2B, 0x3C, 0x4D, 0x5E, 0x6F}},
-    {{0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF}}
+    //
 };
 
 #include <ESP8266WiFi.h>
@@ -336,21 +335,32 @@ void parseBytes(const char* str, char sep, byte* bytes, int maxBytes, int base) 
 }
 
 err_t custom_ip_input_filter(struct pbuf *p, struct netif *inp) {
-    if (p == nullptr)
+    if (p == nullptr || p->payload == nullptr || p->len < 14)
         return ERR_OK;
-    struct ip_hdr *iphdr = (struct ip_hdr *)p->payload;
-    unsigned int src_ip = (&iphdr->src)->addr;
+    struct eth_hdr *ethhdr = (struct eth_hdr *)p->payload;
+    struct ip_hdr *iphdr = nullptr;
+    uint8_t* src_mac = ethhdr->src.addr;
 
-    for (auto client : whitelistedClients) {
-        if (src_ip == client.first) {
-            #if DEBUG_PROC
-            Serial.printf("SECURITY: Dropping packet from %s (MAC Address = %02X:%02X:%02X:%02X:%02X:%02X)\n", IPAddress(src_ip).toString().c_str(), client.second.addr[0], client.second.addr[1], client.second.addr[2], client.second.addr[3], client.second.addr[4], client.second.addr[5]);
-            #endif
-            
-            if (inp != nullptr && inp->name[0] == 'a' && inp->name[1] == 'p') {
-                pbuf_free(p);
-                return ERR_OK;
-            }
+    if (ethhdr->type == htons(0x0800))
+        iphdr = (struct ip_hdr *)((uint8_t *)p->payload + 14);
+    else if (ethhdr->type == htons(0x0806))
+    {
+        pbuf_free(p);
+        return ERR_BUF;
+    }
+    else
+        return original_ap_input(p, inp);
+
+    uint32_t src_ip = iphdr->src.addr;
+    auto it = whitelistedClients.find(src_ip);
+    if (it == whitelistedClients.end()) {
+        #if DEBUG_PROC
+        Serial.printf("SECURITY: Dropping packet from %s (MAC Address = %02X:%02X:%02X:%02X:%02X:%02X)\n", IPAddress(src_ip).toString().c_str(), src_mac[0], src_mac[1], src_mac[2], src_mac[3], src_mac[4], src_mac[5]);
+        #endif
+        
+        if (inp != nullptr && inp->name[0] == 'a' && inp->name[1] == 'p') {
+            pbuf_free(p);
+            return ERR_TIMEOUT;
         }
     }
     return original_ap_input(p, inp);
